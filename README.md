@@ -6,11 +6,11 @@ rukiOS reuses the Linux kernel, Arch's package ecosystem, and mature tools such 
 
 ## Project status
 
-rukiOS is at the early planning and development stage. The first milestone is a Rust-based `rookie` CLI that works on an existing Arch Linux installation. Building a custom ISO comes later.
+rukiOS is at the early planning and development stage. The first milestone is a Rust-based `ruki` CLI that works on an existing Arch Linux installation. Building a custom ISO comes later.
 
 ## Vision
 
-- Manage the system from a consistent `rookie` command-line interface.
+- Manage the system from a consistent `ruki` command-line interface.
 - Offer terminal user interfaces for areas such as services, packages, networking, processes, storage, and logs.
 - Integrate AI to translate natural-language requests into understandable system actions.
 - Make automation safe by showing planned actions, asking for confirmation when appropriate, recording command and output history, detecting dangerous operations, and supporting rollback where practical.
@@ -22,22 +22,22 @@ rukiOS is at the early planning and development stage. The first milestone is a 
 The initial CLI milestone focuses on:
 
 ```bash
-rookie system
-rookie services
+ruki system
+ruki services
 ```
 
 The broader interface may grow to include commands such as:
 
 ```bash
-rookie network
-rookie packages
-rookie files
+ruki network
+ruki packages
+ruki files
 ```
 
 Natural-language requests are a longer-term goal, for example:
 
 ```text
-rookie "install Docker and start it automatically"
+ruki "install Docker and start it automatically"
 ```
 
 ## Development direction

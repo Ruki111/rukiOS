@@ -1,0 +1,8 @@
+[package]
+name = "ruki"
+version = "0.1.0"
+edition = "2024"
+description = "A terminal-first system management CLI for rukiOS"
+license = "MIT"
+
+[dependencies]
