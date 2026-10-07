@@ -1,8 +1,8 @@
-# Rookie OS — Project Requirements
+# rukiOS — Project Requirements
 
 ## What We Are Building
 
-Rookie OS is an **Arch Linux–based distribution** focused on a **terminal-first operating system experience**.
+rukiOS is an **Arch Linux–based distribution** focused on a **terminal-first operating system experience**.
 
 We are not building a new Linux kernel or replacing existing applications. We are building a custom system experience and tooling on top of Arch Linux.
 
@@ -17,28 +17,28 @@ We are not building a new Linux kernel or replacing existing applications. We ar
 
 ## Main Selling Points
 
-### 1. Rookie CLI
+### 1. ruki CLI
 
-The central component of Rookie OS.
+The central component of rukiOS.
 
-`rookie` should provide a consistent interface for managing the system.
+`ruki` should provide a consistent interface for managing the system.
 
 Examples:
 
 ```bash
-rookie system
-rookie services
-rookie network
-rookie packages
-rookie files
+ruki system
+ruki services
+ruki network
+ruki packages
+ruki files
 ```
 
 Eventually:
 
 ```bash
-rookie "connect me to my home Wi-Fi"
-rookie "install Docker and start it automatically"
-rookie "show me what is using my RAM"
+ruki "connect me to my home Wi-Fi"
+ruki "install Docker and start it automatically"
+ruki "show me what is using my RAM"
 ```
 
 ### 2. TUI-Based System Management
@@ -60,7 +60,7 @@ Potential areas:
 
 ### 3. AI System Interface
 
-AI will be integrated into Rookie so users can describe what they want in natural language.
+AI will be integrated into ruki so users can describe what they want in natural language.
 
 The AI should translate the user's intent into safe system operations.
 
@@ -70,7 +70,7 @@ Example:
 User:
 Install Docker and make it start on boot.
 
-Rookie:
+ruki:
 I will:
 1. Install Docker.
 2. Enable docker.service.
@@ -93,7 +93,7 @@ Requirements:
 
 ### 5. Arch Linux Base
 
-Rookie OS will use **Arch Linux** as its foundation.
+rukiOS will use **Arch Linux** as its foundation.
 
 We will reuse:
 
@@ -109,13 +109,13 @@ We will reuse:
 
 A Wayland compositor such as **Sway or Hyprland** may be included to support graphical applications and modern desktop workflows.
 
-It is **not the core of Rookie OS**.
+It is **not the core of rukiOS**.
 
-The terminal and Rookie tooling remain the primary interface.
+The terminal and ruki tooling remain the primary interface.
 
 ## Technology Direction
 
-- **Rust:** Rookie CLI/TUI and system-level tooling.
+- **Rust:** ruki CLI/TUI and system-level tooling.
 - **Bash:** Installation and small system scripts where appropriate.
 - **Arch Linux:** Base distribution.
 - **Wayland:** Graphical protocol when graphical support is required.
@@ -131,9 +131,9 @@ First:
 ```text
 Arch Linux
     ↓
-Rookie CLI
+ruki CLI
     ↓
-Rookie TUI
+ruki TUI
     ↓
 System management
     ↓
@@ -141,25 +141,25 @@ AI integration
     ↓
 Safety/rollback
     ↓
-Rookie OS packaging
+rukiOS packaging
     ↓
 Custom ISO
 ```
 
 ## Week 1 Goal
 
-Build the first version of the **Rookie CLI in Rust**.
+Build the first version of the **ruki CLI in Rust**.
 
 Initial capabilities:
 
 ```bash
-rookie system
-rookie services
+ruki system
+ruki services
 ```
 
 The first version should be simple, reliable, and actually useful on an existing Arch installation.
 
-## What Rookie OS Is NOT
+## What rukiOS Is NOT
 
 - Not a new Linux kernel.
 - Not a completely new operating system from scratch.
@@ -170,6 +170,6 @@ The first version should be simple, reliable, and actually useful on an existing
 
 ## Long-Term Goal
 
-Make Rookie OS feel like:
+Make rukiOS feel like:
 
 > **Linux where the terminal is the operating system's primary interface, and AI is the intelligent layer that helps you control it.**
