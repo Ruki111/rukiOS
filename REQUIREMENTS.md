@@ -1,8 +1,8 @@
-# Rookie OS — Project Requirements
+# rukiOS — Project Requirements
 
 ## What We Are Building
 
-Rookie OS is an **Arch Linux–based distribution** focused on a **terminal-first operating system experience**.
+rukiOS is an **Arch Linux–based distribution** focused on a **terminal-first operating system experience**.
 
 We are not building a new Linux kernel or replacing existing applications. We are building a custom system experience and tooling on top of Arch Linux.
 
@@ -19,7 +19,7 @@ We are not building a new Linux kernel or replacing existing applications. We ar
 
 ### 1. Rookie CLI
 
-The central component of Rookie OS.
+The central component of rukiOS.
 
 `rookie` should provide a consistent interface for managing the system.
 
@@ -93,7 +93,7 @@ Requirements:
 
 ### 5. Arch Linux Base
 
-Rookie OS will use **Arch Linux** as its foundation.
+rukiOS will use **Arch Linux** as its foundation.
 
 We will reuse:
 
@@ -109,7 +109,7 @@ We will reuse:
 
 A Wayland compositor such as **Sway or Hyprland** may be included to support graphical applications and modern desktop workflows.
 
-It is **not the core of Rookie OS**.
+It is **not the core of rukiOS**.
 
 The terminal and Rookie tooling remain the primary interface.
 
@@ -141,7 +141,7 @@ AI integration
     ↓
 Safety/rollback
     ↓
-Rookie OS packaging
+rukiOS packaging
     ↓
 Custom ISO
 ```
@@ -159,7 +159,7 @@ rookie services
 
 The first version should be simple, reliable, and actually useful on an existing Arch installation.
 
-## What Rookie OS Is NOT
+## What rukiOS Is NOT
 
 - Not a new Linux kernel.
 - Not a completely new operating system from scratch.
@@ -170,6 +170,6 @@ The first version should be simple, reliable, and actually useful on an existing
 
 ## Long-Term Goal
 
-Make Rookie OS feel like:
+Make rukiOS feel like:
 
 > **Linux where the terminal is the operating system's primary interface, and AI is the intelligent layer that helps you control it.**

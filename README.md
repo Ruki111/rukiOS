@@ -1,12 +1,12 @@
-# Rookie OS
+# rukiOS
 
-Rookie OS is an Arch Linux–based distribution built around a terminal-first way to manage and use a computer. It aims to make the terminal the primary system interface, with TUIs for complex tasks and graphical applications available when they are useful.
+rukiOS is an Arch Linux–based distribution built around a terminal-first way to manage and use a computer. It aims to make the terminal the primary system interface, with TUIs for complex tasks and graphical applications available when they are useful.
 
-Rookie OS reuses the Linux kernel, Arch's package ecosystem, and mature tools such as `pacman`, `systemd`, and NetworkManager. It is a custom system experience and tooling layer, not a new kernel or an operating system built from scratch.
+rukiOS reuses the Linux kernel, Arch's package ecosystem, and mature tools such as `pacman`, `systemd`, and NetworkManager. It is a custom system experience and tooling layer, not a new kernel or an operating system built from scratch.
 
 ## Project status
 
-Rookie OS is at the early planning and development stage. The first milestone is a Rust-based `rookie` CLI that works on an existing Arch Linux installation. Building a custom ISO comes later.
+rukiOS is at the early planning and development stage. The first milestone is a Rust-based `rookie` CLI that works on an existing Arch Linux installation. Building a custom ISO comes later.
 
 ## Vision
 
@@ -46,7 +46,7 @@ rookie "install Docker and start it automatically"
 2. Add a TUI for system management.
 3. Expand system-management capabilities.
 4. Integrate AI with clear plans and safe execution controls.
-5. Package the Rookie OS experience and eventually build a custom ISO.
+5. Package the rukiOS experience and eventually build a custom ISO.
 
 ## Technology
 
