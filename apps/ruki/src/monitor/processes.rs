@@ -69,3 +69,27 @@ fn parse(fields: &[&str]) -> Option<(u32, u32, String, String, f64, f64)> {
         fields.get(5)?.parse().ok()?,
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_process_row() {
+        let process = parse(&["42", "1", "ruki", "worker", "12.5", "3.2"]).unwrap();
+
+        assert_eq!(process.0, 42);
+        assert_eq!(process.1, 1);
+        assert_eq!(process.2, "ruki");
+        assert_eq!(process.3, "worker");
+        assert_eq!(process.4, 12.5);
+        assert_eq!(process.5, 3.2);
+    }
+
+    #[test]
+    fn rejects_incomplete_or_invalid_process_rows() {
+        assert!(parse(&["42", "1", "ruki"]).is_none());
+        assert!(parse(&["not-a-pid", "1", "ruki", "worker", "0", "0"]).is_none());
+        assert!(parse(&["42", "1", "ruki", "worker", "bad-cpu", "0"]).is_none());
+    }
+}
