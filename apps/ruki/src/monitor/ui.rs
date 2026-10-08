@@ -40,6 +40,7 @@ struct App {
     metrics: Metrics,
     last_sample: Instant,
     process_offset: usize,
+    process_visible_rows: usize,
     selected_panel: usize,
 }
 
@@ -52,6 +53,7 @@ impl App {
             metrics,
             last_sample: Instant::now(),
             process_offset: 0,
+            process_visible_rows: 1,
             selected_panel: 0,
         }
     }
@@ -61,9 +63,7 @@ impl App {
             if self.last_sample.elapsed() >= Duration::from_secs(1) {
                 self.metrics = self.sampler.sample();
                 self.last_sample = Instant::now();
-                self.process_offset = self
-                    .process_offset
-                    .min(self.metrics.processes.len().saturating_sub(1));
+                self.process_offset = self.process_offset.min(self.process_max_offset());
             }
             terminal.draw(|frame| self.draw(frame))?;
             if event::poll(Duration::from_millis(100))? {
@@ -84,15 +84,23 @@ impl App {
                             self.selected_panel = self.selected_panel.checked_sub(1).unwrap_or(4)
                         }
                         KeyCode::Down | KeyCode::Char('j') if self.selected_panel == 4 => {
-                            self.process_offset = (self.process_offset + 1)
-                                .min(self.metrics.processes.len().saturating_sub(1));
+                            self.process_offset =
+                                (self.process_offset + 1).min(self.process_max_offset());
                         }
                         KeyCode::Up | KeyCode::Char('k') if self.selected_panel == 4 => {
                             self.process_offset = self.process_offset.saturating_sub(1)
                         }
-                        KeyCode::Home if self.selected_panel == 4 => self.process_offset = 0,
-                        KeyCode::End if self.selected_panel == 4 => {
-                            self.process_offset = self.metrics.processes.len().saturating_sub(1)
+                        KeyCode::PageDown if self.selected_panel == 4 => {
+                            self.scroll_processes(self.process_visible_rows as isize);
+                        }
+                        KeyCode::PageUp if self.selected_panel == 4 => {
+                            self.scroll_processes(-(self.process_visible_rows as isize));
+                        }
+                        KeyCode::Home | KeyCode::Char('g') if self.selected_panel == 4 => {
+                            self.process_offset = 0;
+                        }
+                        KeyCode::End | KeyCode::Char('G') if self.selected_panel == 4 => {
+                            self.process_offset = self.process_max_offset();
                         }
                         _ => {}
                     },
@@ -108,18 +116,38 @@ impl App {
         Ok(())
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         frame.render_widget(
             Block::default().style(Style::default().bg(BG)),
             frame.area(),
         );
+        let area = frame.area();
+        if area.width < 80 || area.height < 24 {
+            let message = Paragraph::new(vec![
+                Line::from(Span::styled(
+                    "rukiOS SYSTEM MONITOR",
+                    Style::default().fg(ACCENT).bold(),
+                )),
+                Line::from("Terminal is too small for the dashboard."),
+                Line::from("Resize to at least 80 columns by 24 rows."),
+                Line::from("Press q or Escape to quit."),
+            ])
+            .style(Style::default().fg(FG))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(MUTED)),
+            );
+            frame.render_widget(message, area);
+            return;
+        }
         let page = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),
                 Constraint::Length(8),
                 Constraint::Min(8),
-                Constraint::Length(1),
+                Constraint::Length(2),
             ])
             .margin(1)
             .split(frame.area());
@@ -129,6 +157,8 @@ impl App {
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(41), Constraint::Percentage(59)])
             .split(page[2]);
+        self.process_visible_rows = lower[1].height.saturating_sub(3).max(1) as usize;
+        self.process_offset = self.process_offset.min(self.process_max_offset());
         let left = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -141,20 +171,28 @@ impl App {
         self.draw_disks(frame, left[1]);
         self.draw_network(frame, left[2]);
         self.draw_processes(frame, lower[1]);
-        let footer = Paragraph::new(Line::from(vec![
-            key("Tab"),
-            hint(" switch tabs  "),
-            key("1-5"),
-            hint(" select tab  "),
-            key("j/k"),
-            hint(" process list  "),
-            key("click"),
-            hint(" select tab  "),
-            key("r"),
-            hint(" refresh  "),
-            key("q"),
-            hint(" quit"),
-        ]))
+        let footer = Paragraph::new(vec![
+            Line::from(vec![
+                key("Tab/h/l"),
+                hint(" tabs  "),
+                key("1-5"),
+                hint(" jump  "),
+                key("j/k/↑↓"),
+                hint(" rows  "),
+                key("PgUp/Dn"),
+                hint(" page"),
+            ]),
+            Line::from(vec![
+                key("g/G"),
+                hint(" first/last page  "),
+                key("click"),
+                hint(" tabs  "),
+                key("r"),
+                hint(" refresh  "),
+                key("q/Esc"),
+                hint(" quit"),
+            ]),
+        ])
         .style(Style::default().fg(FG));
         frame.render_widget(footer, page[3]);
     }
@@ -207,6 +245,18 @@ impl App {
             ),
             rows[1],
         );
+    }
+
+    fn process_max_offset(&self) -> usize {
+        self.metrics
+            .processes
+            .len()
+            .saturating_sub(self.process_visible_rows.max(1))
+    }
+
+    fn scroll_processes(&mut self, amount: isize) {
+        let next = self.process_offset as isize + amount;
+        self.process_offset = next.clamp(0, self.process_max_offset() as isize) as usize;
     }
 
     fn select_tab_at(&mut self, x: u16, y: u16) {
@@ -451,7 +501,7 @@ impl App {
         ])
         .style(Style::default().fg(ACCENT).bold());
         let visible = area.height.saturating_sub(3) as usize;
-        let rows = self
+        let mut rows = self
             .metrics
             .processes
             .iter()
@@ -467,7 +517,14 @@ impl App {
                     format!("{:.1}%", p.cpu_percent),
                 ])
                 .style(Style::default().fg(FG))
-            });
+            })
+            .collect::<Vec<_>>();
+        if self.metrics.processes.is_empty() {
+            rows.push(
+                Row::new(["—", "—", "Process data unavailable", "—", "—"])
+                    .style(Style::default().fg(MUTED)),
+            );
+        }
         let table = Table::new(
             rows,
             [
