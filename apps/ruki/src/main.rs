@@ -3,6 +3,7 @@ use std::fs;
 use std::process::Command;
 use std::time::Duration;
 
+mod monitor;
 mod tui;
 
 fn main() {
@@ -104,10 +105,15 @@ fn show_help() {
 
 fn show_logs(limit: usize) {
     let limit_arg = limit.to_string();
-    match command_output("journalctl", &["--no-pager", "-n", &limit_arg, "-o", "short-iso"]) {
+    match command_output(
+        "journalctl",
+        &["--no-pager", "-n", &limit_arg, "-o", "short-iso"],
+    ) {
         Some(output) => println!("Latest {limit} system log entries\n{output}"),
         None => {
-            eprintln!("Could not read system logs. Make sure `journalctl` is available and has permission to read the journal.");
+            eprintln!(
+                "Could not read system logs. Make sure `journalctl` is available and has permission to read the journal."
+            );
             std::process::exit(1);
         }
     }
@@ -116,7 +122,12 @@ fn show_logs(limit: usize) {
 fn show_services() {
     match command_output(
         "systemctl",
-        &["list-units", "--type=service", "--state=running", "--no-pager"],
+        &[
+            "list-units",
+            "--type=service",
+            "--state=running",
+            "--no-pager",
+        ],
     ) {
         Some(output) => println!("Active systemd services\n{output}"),
         None => {
@@ -141,14 +152,19 @@ fn show_network_info() {
             }
         }
         None => {
-            eprintln!("Could not show network information. Make sure the `ip` command is available.");
+            eprintln!(
+                "Could not show network information. Make sure the `ip` command is available."
+            );
             std::process::exit(1);
         }
     }
 }
 
 fn show_processes(limit: usize) {
-    match command_output("ps", &["-eo", "pid,comm,%cpu,%mem", "--sort=-%cpu", "--no-headers"]) {
+    match command_output(
+        "ps",
+        &["-eo", "pid,comm,%cpu,%mem", "--sort=-%cpu", "--no-headers"],
+    ) {
         Some(output) => {
             let top_processes = output.lines().take(limit).collect::<Vec<_>>().join("\n");
             println!("Top {limit} running processes (highest CPU use first)");
@@ -395,9 +411,15 @@ fn read_memory() -> String {
     let mut available_kib = None;
     for line in contents.lines() {
         if let Some(value) = line.strip_prefix("MemTotal:") {
-            total_kib = value.split_whitespace().next().and_then(|n| n.parse::<u64>().ok());
+            total_kib = value
+                .split_whitespace()
+                .next()
+                .and_then(|n| n.parse::<u64>().ok());
         } else if let Some(value) = line.strip_prefix("MemAvailable:") {
-            available_kib = value.split_whitespace().next().and_then(|n| n.parse::<u64>().ok());
+            available_kib = value
+                .split_whitespace()
+                .next()
+                .and_then(|n| n.parse::<u64>().ok());
         }
     }
 
