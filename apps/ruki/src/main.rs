@@ -4,6 +4,7 @@ use std::process::Command;
 use std::time::Duration;
 
 mod monitor;
+mod services;
 mod tui;
 
 fn main() {

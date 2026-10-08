@@ -4,6 +4,7 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use crate::monitor::{Metrics, Sampler};
+use crate::services::{ServiceAction, ServiceUnit, list_services, perform_service_action};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
     DefaultTerminal, Frame,
@@ -33,12 +34,26 @@ struct App {
     sampler: Sampler,
     metrics: Metrics,
     last_monitor_update: Instant,
+    services: Vec<ServiceUnit>,
+    services_error: Option<String>,
+    service_filter: String,
+    service_filter_before_edit: String,
+    service_filter_input: bool,
+    service_selected: usize,
+    service_offset: usize,
+    service_visible_rows: usize,
+    pending_service_action: Option<(ServiceAction, String)>,
+    service_status: Option<String>,
 }
 
 impl Default for App {
     fn default() -> Self {
         let mut sampler = Sampler::new();
         let metrics = sampler.sample();
+        let (services, services_error) = match list_services() {
+            Ok(services) => (services, None),
+            Err(error) => (Vec::new(), Some(error)),
+        };
         Self {
             selected: 1,
             scroll: 0,
@@ -46,6 +61,16 @@ impl Default for App {
             sampler,
             metrics,
             last_monitor_update: Instant::now(),
+            services,
+            services_error,
+            service_filter: String::new(),
+            service_filter_before_edit: String::new(),
+            service_filter_input: false,
+            service_selected: 0,
+            service_offset: 0,
+            service_visible_rows: 1,
+            pending_service_action: None,
+            service_status: None,
         }
     }
 }
@@ -60,6 +85,84 @@ impl App {
             terminal.draw(|frame| self.draw(frame))?;
             if event::poll(Duration::from_millis(100))? {
                 if let Event::Key(key) = event::read()? {
+                    if self.pending_service_action.is_some() {
+                        match key.code {
+                            KeyCode::Char('y') | KeyCode::Enter => self.confirm_service_action(),
+                            KeyCode::Char('n') | KeyCode::Esc => self.cancel_service_action(),
+                            _ => {}
+                        }
+                        continue;
+                    }
+                    if self.selected == 7 && self.service_filter_input {
+                        match key.code {
+                            KeyCode::Char(character) => self.service_filter.push(character),
+                            KeyCode::Backspace => {
+                                self.service_filter.pop();
+                            }
+                            KeyCode::Enter => self.service_filter_input = false,
+                            KeyCode::Esc => {
+                                self.service_filter
+                                    .clone_from(&self.service_filter_before_edit);
+                                self.service_filter_input = false;
+                            }
+                            _ => {}
+                        }
+                        self.service_selected = 0;
+                        self.service_offset = 0;
+                        continue;
+                    }
+                    if self.selected == 7 {
+                        self.service_status = None;
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => break,
+                            KeyCode::Char('/') => {
+                                self.service_filter_before_edit
+                                    .clone_from(&self.service_filter);
+                                self.service_filter_input = true;
+                                self.service_selected = 0;
+                                self.service_offset = 0;
+                            }
+                            KeyCode::Char('s') => self.request_service_action(ServiceAction::Start),
+                            KeyCode::Char('x') => self.request_service_action(ServiceAction::Stop),
+                            KeyCode::Char('R') => {
+                                self.request_service_action(ServiceAction::Restart)
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => self.move_service_selection(1),
+                            KeyCode::Up | KeyCode::Char('k') => self.move_service_selection(-1),
+                            KeyCode::PageDown => {
+                                self.move_service_selection(self.service_visible_rows as isize)
+                            }
+                            KeyCode::PageUp => {
+                                self.move_service_selection(-(self.service_visible_rows as isize))
+                            }
+                            KeyCode::Home | KeyCode::Char('g') => {
+                                self.service_selected = 0;
+                                self.service_offset = 0;
+                            }
+                            KeyCode::End | KeyCode::Char('G') => {
+                                self.service_selected =
+                                    self.filtered_services().len().saturating_sub(1);
+                                self.service_offset = self.service_max_offset();
+                            }
+                            KeyCode::Char('r') => self.reload_services(),
+                            KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
+                                self.select_next();
+                            }
+                            KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
+                                self.select_previous();
+                            }
+                            KeyCode::Char(number @ '1'..='9') => {
+                                self.selected = number.to_digit(10).unwrap_or(1) as usize - 1;
+                                self.scroll = 0;
+                            }
+                            KeyCode::Char('0') => {
+                                self.selected = 9;
+                                self.scroll = 0;
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => break,
                         KeyCode::Down
@@ -82,6 +185,7 @@ impl App {
                             self.metrics = self.sampler.sample();
                             self.last_monitor_update = Instant::now();
                             self.scroll = 0;
+                            self.reload_services();
                         }
                         KeyCode::Home => self.scroll = 0,
                         KeyCode::Char('g') => {
@@ -155,38 +259,89 @@ impl App {
             self.draw_overview(frame, body[1]);
         } else if self.selected == 1 {
             self.draw_monitor(frame, body[1]);
+        } else if self.selected == 7 {
+            self.draw_services(frame, body[1]);
         } else {
             self.draw_section(frame, body[1]);
         }
 
-        let footer = Paragraph::new(vec![
-            Line::from(vec![
-                keycap("j/k"),
-                key_label(" move  "),
-                keycap("h/l"),
-                key_label(" prev/next  "),
-                keycap("←/→"),
-                key_label(" prev/next  "),
-                keycap("1-9/0"),
-                key_label(" jump to section"),
-            ]),
-            Line::from(vec![
-                keycap("g/G"),
-                key_label(" first/last section  "),
-                keycap("r"),
-                key_label(" refresh  "),
-                keycap("Ctrl-u/d"),
-                key_label(" scroll  "),
-                keycap("q/Esc"),
-                key_label(" quit"),
-            ]),
-        ])
-        .block(
+        let footer_lines = if self.selected == 7 {
+            if self.service_filter_input {
+                vec![
+                    Line::from(vec![
+                        keycap(&format!("Filter: {}", self.service_filter)),
+                        key_label("  Enter apply  Esc cancel"),
+                    ]),
+                    Line::from(vec![
+                        keycap("j/k"),
+                        key_label(" select  "),
+                        keycap("/"),
+                        key_label(" filter  "),
+                        keycap("q/Esc"),
+                        key_label(" quit"),
+                    ]),
+                ]
+            } else {
+                vec![
+                    Line::from(vec![
+                        keycap("j/k"),
+                        key_label(" select  "),
+                        keycap("/"),
+                        key_label(" filter  "),
+                        keycap("s"),
+                        key_label(" start  "),
+                        keycap("x"),
+                        key_label(" stop  "),
+                        keycap("R"),
+                        key_label(" restart"),
+                    ]),
+                    Line::from(vec![
+                        keycap("r"),
+                        key_label(" refresh  "),
+                        keycap("y/Enter"),
+                        key_label(" confirm  "),
+                        keycap("n/Esc"),
+                        key_label(" cancel"),
+                    ]),
+                    Line::from(vec![
+                        keycap("h/l"),
+                        key_label(" sections  "),
+                        keycap("q/Esc"),
+                        key_label(" quit"),
+                    ]),
+                ]
+            }
+        } else {
+            vec![
+                Line::from(vec![
+                    keycap("j/k"),
+                    key_label(" move  "),
+                    keycap("h/l"),
+                    key_label(" prev/next  "),
+                    keycap("←/→"),
+                    key_label(" prev/next  "),
+                    keycap("1-9/0"),
+                    key_label(" jump to section"),
+                ]),
+                Line::from(vec![
+                    keycap("g/G"),
+                    key_label(" first/last section  "),
+                    keycap("r"),
+                    key_label(" refresh  "),
+                    keycap("Ctrl-u/d"),
+                    key_label(" scroll  "),
+                    keycap("q/Esc"),
+                    key_label(" quit"),
+                ]),
+            ]
+        };
+        let footer = Paragraph::new(footer_lines).block(
             Block::default()
                 .borders(Borders::TOP)
                 .border_style(Style::default().fg(Color::DarkGray)),
         );
         frame.render_widget(footer, page[2]);
+        self.draw_service_confirmation(frame, frame.area());
     }
 
     fn draw_navigation(&self, frame: &mut Frame, area: Rect) {
@@ -233,6 +388,250 @@ impl App {
             .wrap(Wrap { trim: false });
         let paragraph = paragraph.scroll((self.scroll, 0));
         frame.render_widget(paragraph, area);
+    }
+
+    fn draw_services(&mut self, frame: &mut Frame, area: Rect) {
+        let outer = Block::default()
+            .title(" SERVICES · SYSTEMD ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan));
+        let inner = outer.inner(area);
+        frame.render_widget(outer, area);
+
+        let panes = if inner.width >= 90 {
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+                .split(inner)
+        } else {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+                .split(inner)
+        };
+        self.service_visible_rows = panes[0].height.saturating_sub(3).max(1) as usize;
+        self.clamp_service_selection();
+
+        let visible = self.filtered_services();
+        let table_rows = visible
+            .iter()
+            .enumerate()
+            .skip(self.service_offset)
+            .take(panes[0].height.saturating_sub(3) as usize)
+            .map(|(row_index, service)| {
+                let style = if row_index == self.service_selected {
+                    Style::default()
+                        .fg(Color::White)
+                        .bg(Color::Rgb(35, 63, 61))
+                        .add_modifier(Modifier::BOLD)
+                } else if service.active == "failed" {
+                    Style::default().fg(Color::Red)
+                } else if service.active == "active" {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::Gray)
+                };
+                Row::new([
+                    service.name.clone(),
+                    service.load.clone(),
+                    service.active.clone(),
+                    service.sub.clone(),
+                ])
+                .style(style)
+            })
+            .collect::<Vec<_>>();
+        let service_header = Row::new(["UNIT", "LOAD", "ACTIVE", "SUB"])
+            .style(Style::default().fg(Color::Cyan).bold());
+        let filter_title = if self.service_filter.is_empty() {
+            format!("{} services", visible.len())
+        } else {
+            format!("{} matches · {}", visible.len(), self.service_filter)
+        };
+        let service_table = Table::new(
+            table_rows,
+            [
+                Constraint::Percentage(48),
+                Constraint::Length(8),
+                Constraint::Length(9),
+                Constraint::Min(8),
+            ],
+        )
+        .header(service_header)
+        .column_spacing(1)
+        .block(
+            Block::default()
+                .title(filter_title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
+        frame.render_widget(service_table, panes[0]);
+
+        let detail = if let Some(error) = &self.services_error {
+            Paragraph::new(error.as_str())
+        } else if let Some(service) = visible.get(self.service_selected) {
+            let mut lines = vec![
+                Line::from(Span::styled(
+                    service.name.clone(),
+                    Style::default().fg(Color::Cyan).bold(),
+                )),
+                Line::from(format!("Load:   {}", service.load)),
+                Line::from(format!("State:  {} / {}", service.active, service.sub)),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "DESCRIPTION",
+                    Style::default().fg(Color::Cyan).bold(),
+                )),
+                Line::from(if service.description.is_empty() {
+                    "No description available".to_string()
+                } else {
+                    service.description.clone()
+                }),
+            ];
+            if let Some(status) = &self.service_status {
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled(
+                    status.clone(),
+                    Style::default().fg(Color::Yellow),
+                )));
+            }
+            Paragraph::new(lines)
+        } else if self.services.is_empty() {
+            Paragraph::new("No services found. Press r to retry.")
+        } else {
+            Paragraph::new("No services match this filter.")
+        };
+        let detail = detail
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: true })
+            .block(
+                Block::default()
+                    .title(" SELECTED SERVICE ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::DarkGray)),
+            );
+        frame.render_widget(detail, panes[1]);
+    }
+
+    fn filtered_services(&self) -> Vec<&ServiceUnit> {
+        let query = self.service_filter.trim().to_lowercase();
+        self.services
+            .iter()
+            .filter(|service| {
+                query.is_empty()
+                    || service.name.to_lowercase().contains(&query)
+                    || service.description.to_lowercase().contains(&query)
+                    || service.active.to_lowercase().contains(&query)
+                    || service.sub.to_lowercase().contains(&query)
+            })
+            .collect()
+    }
+
+    fn service_max_offset(&self) -> usize {
+        self.filtered_services()
+            .len()
+            .saturating_sub(self.service_visible_rows.max(1))
+    }
+
+    fn clamp_service_selection(&mut self) {
+        let count = self.filtered_services().len();
+        if count == 0 {
+            self.service_selected = 0;
+            self.service_offset = 0;
+            return;
+        }
+        self.service_selected = self.service_selected.min(count - 1);
+        if self.service_selected < self.service_offset {
+            self.service_offset = self.service_selected;
+        } else if self.service_selected >= self.service_offset + self.service_visible_rows {
+            self.service_offset = self
+                .service_selected
+                .saturating_add(1)
+                .saturating_sub(self.service_visible_rows);
+        }
+        self.service_offset = self.service_offset.min(self.service_max_offset());
+    }
+
+    fn move_service_selection(&mut self, amount: isize) {
+        let count = self.filtered_services().len();
+        if count == 0 {
+            return;
+        }
+        self.service_selected = (self.service_selected as isize + amount)
+            .clamp(0, count.saturating_sub(1) as isize) as usize;
+        self.clamp_service_selection();
+    }
+
+    fn reload_services(&mut self) {
+        match list_services() {
+            Ok(services) => {
+                self.services = services;
+                self.services_error = None;
+            }
+            Err(error) => {
+                self.services.clear();
+                self.services_error = Some(error);
+            }
+        }
+        self.clamp_service_selection();
+    }
+
+    fn request_service_action(&mut self, action: ServiceAction) {
+        let visible = self.filtered_services();
+        let Some(service) = visible.get(self.service_selected) else {
+            self.service_status = Some("Select a service first.".into());
+            return;
+        };
+        self.pending_service_action = Some((action, service.name.clone()));
+    }
+
+    fn confirm_service_action(&mut self) {
+        let Some((action, name)) = self.pending_service_action.take() else {
+            return;
+        };
+        match perform_service_action(action, &name) {
+            Ok(()) => {
+                self.service_status = Some(format!("Requested {} for {name}.", action.as_str()));
+                self.reload_services();
+            }
+            Err(error) => self.service_status = Some(error),
+        }
+    }
+
+    fn cancel_service_action(&mut self) {
+        self.pending_service_action = None;
+        self.service_status = Some("Service action canceled.".into());
+    }
+
+    fn draw_service_confirmation(&self, frame: &mut Frame, area: Rect) {
+        let Some((action, name)) = &self.pending_service_action else {
+            return;
+        };
+        let width = area.width.min(68);
+        let height = area.height.min(8);
+        let popup = Rect::new(
+            area.x + area.width.saturating_sub(width) / 2,
+            area.y + area.height.saturating_sub(height) / 2,
+            width,
+            height,
+        );
+        frame.render_widget(ratatui::widgets::Clear, popup);
+        let content = Paragraph::new(vec![
+            Line::from(format!("Run systemctl {} {name}?", action.as_str())),
+            Line::from("This can affect system services and connected apps."),
+            Line::from(Span::styled(
+                "y / Enter confirm    n / Esc cancel",
+                Style::default().fg(Color::Yellow).bold(),
+            )),
+        ])
+        .style(Style::default().fg(Color::White).bg(Color::Black))
+        .block(
+            Block::default()
+                .title(" Confirm service action ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow))
+                .style(Style::default().bg(Color::Black)),
+        );
+        frame.render_widget(content, popup);
     }
 
     fn draw_overview(&self, frame: &mut Frame, area: Rect) {
@@ -658,7 +1057,6 @@ struct Snapshot {
     network_listing: String,
     active_interfaces: usize,
     processes: String,
-    services: String,
     health: String,
     logs: String,
 }
@@ -672,7 +1070,6 @@ impl Snapshot {
         let system = system_summary(&memory);
         let disk_listing = disk_listing();
         let processes = process_listing();
-        let services = service_listing();
         let health = health_summary(&memory, disk.as_ref(), active_interfaces);
         let logs = logs_listing(40);
 
@@ -684,7 +1081,6 @@ impl Snapshot {
             network_listing,
             active_interfaces,
             processes,
-            services,
             health,
             logs,
         }
@@ -697,7 +1093,6 @@ impl Snapshot {
             4 => format!("Memory usage\n\n{}", self.memory),
             5 => self.network_listing.clone(),
             6 => self.processes.clone(),
-            7 => self.services.clone(),
             8 => self.health.clone(),
             9 => self.logs.clone(),
             _ => String::new(),
@@ -717,7 +1112,7 @@ pub fn run() -> io::Result<()> {
     ratatui::run(|terminal| App::default().run(terminal))
 }
 
-fn keycap(key: &'static str) -> Span<'static> {
+fn keycap(key: &str) -> Span<'static> {
     Span::styled(
         format!(" {key} "),
         Style::default()
@@ -918,20 +1313,6 @@ fn process_listing() -> String {
         format!("PID COMMAND         %CPU %MEM\n{rows}")
     })
     .unwrap_or_else(|| "Could not list processes (is `ps` installed?)".into())
-}
-
-fn service_listing() -> String {
-    run_command(
-        "systemctl",
-        &[
-            "list-units",
-            "--type=service",
-            "--state=running",
-            "--no-pager",
-            "--no-legend",
-        ],
-    )
-    .unwrap_or_else(|| "Could not list systemd services.".into())
 }
 
 fn logs_listing(limit: usize) -> String {

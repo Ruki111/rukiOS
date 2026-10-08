@@ -40,6 +40,17 @@ Open the System Console by running `cargo run` or `ruki` without a command.
 | `r` | Refresh the displayed system snapshot. |
 | `q` / `Esc` | Quit the System Console. |
 
+When Services (section 8) is selected, the keys are:
+
+| Keys / input | Action |
+| --- | --- |
+| `j` / `k`, `↓` / `↑`, `Page Up` / `Page Down` | Select a service. |
+| `/`, then type | Filter by service name, description, or state; Enter applies, Escape cancels. |
+| `s` / `x` / `R` | Request start / stop / restart for the selected service. Each request opens a confirmation prompt; `y` / Enter confirms and `n` / Escape cancels. |
+| `r` | Reload the service list. |
+| `h` / `l`, `←` / `→`, Tab | Change sections. |
+| `q` / `Esc` | Quit the System Console. |
+
 The sections are Overview, Monitor, System, Disk, Memory, Network, Processes, Services, Health, and Logs.
 
 ## Standalone live monitor
@@ -64,4 +75,4 @@ Metrics refresh automatically about once per second. Some hardware readings depe
 
 ## External tools and limits
 
-Some read-only commands call standard Linux tools: `df` for disk space, `ip` for network addresses, `ps` for processes, `systemctl` for services, and `journalctl` for logs. Journal visibility depends on the current user's permissions. The commands documented here are the implemented commands; package management, file management, and natural-language requests are planned, not available yet.
+System information uses standard Linux tools including `df`, `ip`, `ps`, `systemctl`, and `journalctl`. Service start/stop/restart requests use systemd and may fail when the current user lacks permission. Journal visibility also depends on the current user's permissions. The commands documented here are the implemented commands; package management, file management, and natural-language requests are planned, not available yet.
