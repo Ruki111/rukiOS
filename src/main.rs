@@ -13,6 +13,22 @@ fn main() {
         Some("disk") => show_disk_info(),
         Some("memory") => show_memory_info(),
         Some("network") => show_network_info(),
+        Some("logs") => {
+            let limit = args
+                .next()
+                .map(|value| value.parse::<usize>())
+                .transpose()
+                .unwrap_or_else(|_| {
+                    eprintln!("Log count must be a positive number.");
+                    std::process::exit(2);
+                })
+                .unwrap_or(40);
+            if limit == 0 {
+                eprintln!("Log count must be a positive number.");
+                std::process::exit(2);
+            }
+            show_logs(limit);
+        }
         Some("health") => {
             let json = match args.next().as_deref() {
                 None => false,
@@ -66,6 +82,7 @@ fn show_help() {
     println!("  disk      Show disk space for mounted filesystems");
     println!("  memory    Show memory usage");
     println!("  network   Show network interfaces and IP addresses");
+    println!("  logs [number]  Show recent system journal entries (default: 40)");
     println!("  health    Summarize memory, disk, and network status");
     println!("  services  List active systemd services");
     println!("  processes [number]  Show processes by CPU use (default: 10)");
@@ -77,11 +94,23 @@ fn show_help() {
     println!("  cargo run -- disk");
     println!("  cargo run -- memory");
     println!("  cargo run -- network");
+    println!("  cargo run -- logs 40");
     println!("  cargo run -- health");
     println!("  cargo run -- health --json");
     println!("  cargo run -- services");
     println!("  cargo run -- processes");
     println!("  cargo run -- processes 20");
+}
+
+fn show_logs(limit: usize) {
+    let limit_arg = limit.to_string();
+    match command_output("journalctl", &["--no-pager", "-n", &limit_arg, "-o", "short-iso"]) {
+        Some(output) => println!("Latest {limit} system log entries\n{output}"),
+        None => {
+            eprintln!("Could not read system logs. Make sure `journalctl` is available and has permission to read the journal.");
+            std::process::exit(1);
+        }
+    }
 }
 
 fn show_services() {

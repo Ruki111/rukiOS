@@ -11,7 +11,7 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Wrap},
 };
 
-const SECTIONS: [&str; 8] = [
+const SECTIONS: [&str; 9] = [
     "Overview",
     "System",
     "Disk",
@@ -20,6 +20,7 @@ const SECTIONS: [&str; 8] = [
     "Processes",
     "Services",
     "Health",
+    "Logs",
 ];
 
 struct App {
@@ -68,7 +69,7 @@ impl App {
                         self.selected = SECTIONS.len() - 1;
                         self.scroll = 0;
                     }
-                    KeyCode::Char(number @ '1'..='8') => {
+                    KeyCode::Char(number @ '1'..='9') => {
                         self.selected = number.to_digit(10).unwrap_or(1) as usize - 1;
                         self.scroll = 0;
                     }
@@ -89,7 +90,7 @@ impl App {
         self.scroll = 0;
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         let page = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(4)])
@@ -119,7 +120,7 @@ impl App {
                 keycap("j/k"), key_label(" move  "),
                 keycap("h/l"), key_label(" prev/next  "),
                 keycap("←/→"), key_label(" prev/next  "),
-                keycap("1-8"), key_label(" jump to section"),
+                keycap("1-9"), key_label(" jump to section"),
             ]),
             Line::from(vec![
                 keycap("g/G"), key_label(" first/last section  "),
@@ -157,9 +158,14 @@ impl App {
         frame.render_widget(nav, area);
     }
 
-    fn draw_section(&self, frame: &mut Frame, area: Rect) {
+    fn draw_section(&mut self, frame: &mut Frame, area: Rect) {
         let title = SECTIONS[self.selected];
         let content = self.snapshot.section_content(self.selected);
+        let inner_width = area.width.saturating_sub(2).max(1);
+        let inner_height = area.height.saturating_sub(2) as usize;
+        let total_lines = wrapped_line_count(&content, inner_width);
+        let max_scroll = total_lines.saturating_sub(inner_height);
+        self.scroll = self.scroll.min(max_scroll.min(u16::MAX as usize) as u16);
         let paragraph = Paragraph::new(content)
             .style(Style::default().fg(Color::White))
             .block(
@@ -168,8 +174,8 @@ impl App {
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Cyan)),
             )
-            .wrap(Wrap { trim: false })
-            .scroll((self.scroll, 0));
+            .wrap(Wrap { trim: false });
+        let paragraph = paragraph.scroll((self.scroll, 0));
         frame.render_widget(paragraph, area);
     }
 
@@ -242,6 +248,7 @@ struct Snapshot {
     processes: String,
     services: String,
     health: String,
+    logs: String,
 }
 
 impl Snapshot {
@@ -255,6 +262,7 @@ impl Snapshot {
         let processes = process_listing();
         let services = service_listing();
         let health = health_summary(&memory, disk.as_ref(), active_interfaces);
+        let logs = logs_listing(40);
 
         Self {
             system,
@@ -266,6 +274,7 @@ impl Snapshot {
             processes,
             services,
             health,
+            logs,
         }
     }
 
@@ -278,9 +287,18 @@ impl Snapshot {
             5 => self.processes.clone(),
             6 => self.services.clone(),
             7 => self.health.clone(),
+            8 => self.logs.clone(),
             _ => String::new(),
         }
     }
+}
+
+fn wrapped_line_count(content: &str, width: u16) -> usize {
+    let width = usize::from(width.max(1));
+    content
+        .split('\n')
+        .map(|line| Line::from(line).width().max(1).div_ceil(width))
+        .sum()
 }
 
 pub fn run() -> io::Result<()> {
@@ -389,6 +407,13 @@ fn process_listing() -> String {
 fn service_listing() -> String {
     run_command("systemctl", &["list-units", "--type=service", "--state=running", "--no-pager", "--no-legend"])
         .unwrap_or_else(|| "Could not list systemd services.".into())
+}
+
+fn logs_listing(limit: usize) -> String {
+    let limit_arg = limit.to_string();
+    run_command("journalctl", &["--no-pager", "-n", &limit_arg, "-o", "short-iso"])
+        .filter(|output| !output.is_empty())
+        .unwrap_or_else(|| "Could not read system logs. Check journalctl availability and permissions.".into())
 }
 
 fn health_summary(memory: &str, disk: Option<&(String, u16)>, interfaces: usize) -> String {
