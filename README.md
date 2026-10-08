@@ -48,6 +48,8 @@ cargo run -- help
 
 Run these commands from the project directory. Once installed, use `ruki` in place of `cargo run --`.
 
+An Arch package recipe is available at [packaging/arch/PKGBUILD](packaging/arch/PKGBUILD). After these changes are published, build and install it from the repository with `cd packaging/arch && makepkg -si`. This installs both `ruki` and `ruki-monitor`; it packages the applications, not a complete rukiOS distribution.
+
 `health` summarizes memory, root disk usage, and active network interfaces. It reports `WARN` when disk use reaches 85% or memory use reaches 90%, and `UNKNOWN` when a reading is unavailable. The JSON form provides the same checks in a machine-readable format.
 
 The interface uses Ratatui and Crossterm. System details rely on standard Linux utilities: `df`, `ip`, `ps`, `systemctl`, `journalctl`, and `uname`. Some sections require the corresponding utility or systemd to be available. Access to system logs depends on the journal permissions of the current user.

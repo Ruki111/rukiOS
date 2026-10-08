@@ -19,7 +19,7 @@ rukiOS/
 ├── docs/
 │   └── architecture/
 │       └── PROJECT_STRUCTURE.md
-├── packaging/                 # planned Arch package and OS integration files
+├── packaging/arch/            # Arch PKGBUILD for the current user-space apps
 ├── scripts/                   # planned development and release helpers
 └── assets/                    # planned themes, icons, and other bundled resources
 ```
@@ -47,7 +47,7 @@ docs/
 └── user/                       # user guides and keyboard shortcut references
 
 packaging/
-└── arch/                       # PKGBUILD, service units, and Arch integration
+└── arch/                       # PKGBUILD and Arch-specific packaging docs
 
 assets/                         # themes, icons, and other static resources
 scripts/                        # reproducible developer/release automation
