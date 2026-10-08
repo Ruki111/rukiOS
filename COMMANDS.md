@@ -53,6 +53,9 @@ Run `cargo run --bin ruki-monitor` from the repository root, or run `ruki-monito
 | `j` / `k`, `↓` / `↑` | Scroll the process list when Processes is selected. |
 | `Page Up` / `Page Down` | Move one process-list page. |
 | `g` / `G`, `Home` / `End` | Jump to the first or last process-list page. |
+| `/`, then type | Filter processes by name, user, or PID; Enter applies, Escape cancels. |
+| `s` | Cycle process sorting by CPU, memory, then PID. |
+| `t` | Toggle hierarchical tree and flat process views. |
 | `r` | Refresh readings immediately. |
 | `q` / `Esc` | Quit the monitor. |
 

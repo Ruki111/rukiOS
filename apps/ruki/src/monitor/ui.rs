@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     io,
     time::{Duration, Instant},
 };
@@ -17,6 +18,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Sparkline, Table, Wrap},
 };
 
+use crate::monitor::processes::ProcessInfo;
 use crate::monitor::{Metrics, Sampler};
 
 const BG: Color = Color::Rgb(25, 26, 25);
@@ -42,6 +44,36 @@ struct App {
     process_offset: usize,
     process_visible_rows: usize,
     selected_panel: usize,
+    process_filter: String,
+    filter_before_edit: String,
+    filter_input: bool,
+    process_sort: ProcessSort,
+    tree_view: bool,
+}
+
+#[derive(Clone, Copy)]
+enum ProcessSort {
+    Cpu,
+    Memory,
+    Pid,
+}
+
+impl ProcessSort {
+    fn next(self) -> Self {
+        match self {
+            Self::Cpu => Self::Memory,
+            Self::Memory => Self::Pid,
+            Self::Pid => Self::Cpu,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Cpu => "CPU ↓",
+            Self::Memory => "MEM ↓",
+            Self::Pid => "PID ↑",
+        }
+    }
 }
 
 impl App {
@@ -55,6 +87,11 @@ impl App {
             process_offset: 0,
             process_visible_rows: 1,
             selected_panel: 0,
+            process_filter: String::new(),
+            filter_before_edit: String::new(),
+            filter_input: false,
+            process_sort: ProcessSort::Cpu,
+            tree_view: true,
         }
     }
 
@@ -68,8 +105,37 @@ impl App {
             terminal.draw(|frame| self.draw(frame))?;
             if event::poll(Duration::from_millis(100))? {
                 match event::read()? {
+                    Event::Key(key) if self.filter_input => {
+                        match key.code {
+                            KeyCode::Char(character) => self.process_filter.push(character),
+                            KeyCode::Backspace => {
+                                self.process_filter.pop();
+                            }
+                            KeyCode::Enter => self.filter_input = false,
+                            KeyCode::Esc => {
+                                self.process_filter.clone_from(&self.filter_before_edit);
+                                self.filter_input = false;
+                            }
+                            _ => {}
+                        }
+                        self.process_offset = 0;
+                    }
                     Event::Key(key) => match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => break,
+                        KeyCode::Char('/') => {
+                            self.selected_panel = 5;
+                            self.filter_before_edit.clone_from(&self.process_filter);
+                            self.filter_input = true;
+                            self.process_offset = 0;
+                        }
+                        KeyCode::Char('s') if self.selected_panel == 5 => {
+                            self.process_sort = self.process_sort.next();
+                            self.process_offset = 0;
+                        }
+                        KeyCode::Char('t') if self.selected_panel == 5 => {
+                            self.tree_view = !self.tree_view;
+                            self.process_offset = 0;
+                        }
                         KeyCode::Char('r') => {
                             self.metrics = self.sampler.sample();
                             self.last_sample = Instant::now();
@@ -129,7 +195,7 @@ impl App {
                     Style::default().fg(ACCENT).bold(),
                 )),
                 Line::from("Terminal is too small to show a panel."),
-                Line::from("Resize to at least 40 columns by 12 rows."),
+                Line::from("Minimum size: 40 cols × 12 rows."),
                 Line::from("Press q or Escape to quit."),
             ])
             .style(Style::default().fg(FG))
@@ -561,6 +627,38 @@ impl App {
     }
 
     fn draw_footer(&self, frame: &mut Frame, area: Rect) {
+        if self.selected_panel == 5 {
+            let message = if self.filter_input {
+                format!("Filter: {}▏  Enter apply  Esc cancel", self.process_filter)
+            } else if area.width >= 90 {
+                format!(
+                    "/ filter   s sort ({})   t {}   j/k rows   PgUp/Dn page   g/G ends   r refresh   q quit",
+                    self.process_sort.label(),
+                    if self.tree_view { "flat" } else { "tree" }
+                )
+            } else if area.height > 1 {
+                format!(
+                    "/ filter   s sort ({})   t {}   j/k rows",
+                    self.process_sort.label(),
+                    if self.tree_view { "flat" } else { "tree" }
+                )
+            } else {
+                format!(
+                    "/filter  s sort  t {}  j/k move  q quit",
+                    if self.tree_view { "flat" } else { "tree" }
+                )
+            };
+            let lines = if !self.filter_input && area.height > 1 && area.width < 90 {
+                vec![
+                    Line::from(hint(&message)),
+                    Line::from(hint("PgUp/Dn page   g/G ends   r refresh   q quit")),
+                ]
+            } else {
+                vec![Line::from(hint(&message))]
+            };
+            frame.render_widget(Paragraph::new(lines).style(Style::default().fg(FG)), area);
+            return;
+        }
         let lines = if area.width >= 90 {
             vec![Line::from(vec![hint(
                 "Tab/h/l panel   1–6 jump   click select   j/k rows   PgUp/Dn page   g/G ends   r refresh   q quit",
@@ -629,14 +727,23 @@ impl App {
     }
 
     fn process_max_offset(&self) -> usize {
-        max_process_offset(self.metrics.processes.len(), self.process_visible_rows)
+        max_process_offset(self.process_list().len(), self.process_visible_rows)
+    }
+
+    fn process_list(&self) -> Vec<&ProcessInfo> {
+        filtered_processes(
+            &self.metrics.processes,
+            &self.process_filter,
+            self.process_sort,
+            self.tree_view,
+        )
     }
 
     fn scroll_processes(&mut self, amount: isize) {
         self.process_offset = scroll_process_offset(
             self.process_offset,
             amount,
-            self.metrics.processes.len(),
+            self.process_list().len(),
             self.process_visible_rows,
         );
     }
@@ -924,20 +1031,28 @@ impl App {
         let header = Row::new([
             Cell::from("PID"),
             Cell::from("USER"),
-            Cell::from("PROCESS TREE"),
+            Cell::from(if self.tree_view {
+                "PROCESS TREE"
+            } else {
+                "PROCESS"
+            }),
             Cell::from("MEM"),
             Cell::from("CPU"),
         ])
         .style(Style::default().fg(ACCENT).bold());
         let visible = area.height.saturating_sub(3) as usize;
-        let mut rows = self
-            .metrics
-            .processes
+        let processes = self.process_list();
+        let mut rows = processes
             .iter()
             .skip(self.process_offset)
             .take(visible)
             .map(|p| {
-                let name = format!("{}{}", "  ".repeat(p.depth.min(4)), p.name);
+                let prefix = if self.tree_view {
+                    "  ".repeat(p.depth.min(4))
+                } else {
+                    String::new()
+                };
+                let name = format!("{prefix}{}", p.name);
                 Row::new(vec![
                     p.pid.to_string(),
                     p.user.clone(),
@@ -948,12 +1063,33 @@ impl App {
                 .style(Style::default().fg(FG))
             })
             .collect::<Vec<_>>();
-        if self.metrics.processes.is_empty() {
+        if processes.is_empty() {
             rows.push(
-                Row::new(["—", "—", "Process data unavailable", "—", "—"])
-                    .style(Style::default().fg(MUTED)),
+                Row::new([
+                    "—",
+                    "—",
+                    if self.metrics.processes.is_empty() {
+                        "Process data unavailable"
+                    } else {
+                        "No matching processes"
+                    },
+                    "—",
+                    "—",
+                ])
+                .style(Style::default().fg(MUTED)),
             );
         }
+        let filter_label = if self.process_filter.is_empty() {
+            "/ to filter".to_string()
+        } else {
+            format!("filter: {}", self.process_filter)
+        };
+        let title = format!(
+            " PROCESSES · {} · {} · {} ",
+            self.process_sort.label(),
+            if self.tree_view { "TREE" } else { "FLAT" },
+            filter_label
+        );
         let table = Table::new(
             rows,
             [
@@ -965,7 +1101,16 @@ impl App {
             ],
         )
         .header(header)
-        .block(panel("PROCESSES · CPU SORT", self.selected_panel == 5))
+        .block(
+            Block::default()
+                .title(Span::styled(title, Style::default().fg(ACCENT).bold()))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(if self.selected_panel == 5 {
+                    ACCENT
+                } else {
+                    MUTED
+                })),
+        )
         .column_spacing(1);
         frame.render_widget(table, area);
     }
@@ -973,6 +1118,154 @@ impl App {
 
 fn is_unusable(area: Rect) -> bool {
     area.width < 40 || area.height < 12
+}
+
+fn compare_processes(
+    left: &ProcessInfo,
+    right: &ProcessInfo,
+    sort: ProcessSort,
+) -> std::cmp::Ordering {
+    match sort {
+        ProcessSort::Cpu => right
+            .cpu_percent
+            .total_cmp(&left.cpu_percent)
+            .then_with(|| left.pid.cmp(&right.pid)),
+        ProcessSort::Memory => right
+            .memory_percent
+            .total_cmp(&left.memory_percent)
+            .then_with(|| left.pid.cmp(&right.pid)),
+        ProcessSort::Pid => left.pid.cmp(&right.pid),
+    }
+}
+
+fn filtered_processes<'a>(
+    processes: &'a [ProcessInfo],
+    filter: &str,
+    sort: ProcessSort,
+    tree_view: bool,
+) -> Vec<&'a ProcessInfo> {
+    let query = filter.trim().to_lowercase();
+    let mut matches = processes
+        .iter()
+        .filter(|process| {
+            query.is_empty()
+                || process.name.to_lowercase().contains(&query)
+                || process.user.to_lowercase().contains(&query)
+                || process.pid.to_string().contains(&query)
+        })
+        .collect::<Vec<_>>();
+    matches.sort_by(|left, right| compare_processes(left, right, sort));
+    if !tree_view {
+        return matches;
+    }
+
+    let included = matches
+        .iter()
+        .map(|process| process.pid)
+        .collect::<HashSet<_>>();
+    let mut children: HashMap<u32, Vec<&ProcessInfo>> = HashMap::new();
+    let mut roots = Vec::new();
+    for process in matches {
+        if included.contains(&process.ppid) {
+            children.entry(process.ppid).or_default().push(process);
+        } else {
+            roots.push(process);
+        }
+    }
+    roots.sort_by(|left, right| compare_processes(left, right, sort));
+    for siblings in children.values_mut() {
+        siblings.sort_by(|left, right| compare_processes(left, right, sort));
+    }
+    let mut ordered = Vec::new();
+    for root in roots {
+        let mut stack = vec![root];
+        while let Some(process) = stack.pop() {
+            ordered.push(process);
+            if let Some(children) = children.get(&process.pid) {
+                stack.extend(children.iter().rev().copied());
+            }
+        }
+    }
+    ordered
+}
+
+#[cfg(test)]
+mod process_view_tests {
+    use super::{ProcessSort, filtered_processes};
+    use crate::monitor::processes::ProcessInfo;
+
+    fn sample_processes() -> Vec<ProcessInfo> {
+        vec![
+            ProcessInfo {
+                pid: 20,
+                ppid: 10,
+                user: "alice".into(),
+                name: "worker".into(),
+                cpu_percent: 80.0,
+                memory_percent: 10.0,
+                depth: 1,
+            },
+            ProcessInfo {
+                pid: 10,
+                ppid: 1,
+                user: "root".into(),
+                name: "service".into(),
+                cpu_percent: 10.0,
+                memory_percent: 70.0,
+                depth: 0,
+            },
+            ProcessInfo {
+                pid: 30,
+                ppid: 1,
+                user: "bob".into(),
+                name: "browser".into(),
+                cpu_percent: 30.0,
+                memory_percent: 40.0,
+                depth: 0,
+            },
+        ]
+    }
+
+    #[test]
+    fn process_filter_matches_name_user_and_pid_case_insensitively() {
+        let processes = sample_processes();
+        for (query, expected_pid) in [("WORK", 20), ("BOB", 30), ("10", 10)] {
+            assert_eq!(
+                filtered_processes(&processes, query, ProcessSort::Cpu, false)
+                    .iter()
+                    .map(|process| process.pid)
+                    .collect::<Vec<_>>(),
+                [expected_pid]
+            );
+        }
+    }
+
+    #[test]
+    fn process_sort_supports_cpu_memory_and_pid() {
+        let processes = sample_processes();
+        let pids = |sort| {
+            filtered_processes(&processes, "", sort, false)
+                .iter()
+                .map(|process| process.pid)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(pids(ProcessSort::Cpu), [20, 30, 10]);
+        assert_eq!(pids(ProcessSort::Memory), [10, 30, 20]);
+        assert_eq!(pids(ProcessSort::Pid), [10, 20, 30]);
+    }
+
+    #[test]
+    fn tree_view_places_parent_before_children_and_flat_view_sorts_globally() {
+        let processes = sample_processes();
+        let pids = |tree_view| {
+            filtered_processes(&processes, "", ProcessSort::Cpu, tree_view)
+                .iter()
+                .map(|process| process.pid)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(pids(true), [30, 10, 20]);
+        assert_eq!(pids(false), [20, 30, 10]);
+    }
 }
 
 fn is_compact(area: Rect) -> bool {
@@ -1039,7 +1332,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(screen.contains("Terminal is too small"));
-        assert!(screen.contains("40 columns by 12 rows"));
+        assert!(screen.contains("40 cols × 12 rows"));
         assert!(screen.contains("Press q or Escape to quit"));
     }
 }
@@ -1053,7 +1346,7 @@ fn panel(title: &'static str, selected: bool) -> Block<'static> {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(if selected { ACCENT } else { MUTED }))
 }
-fn hint(text: &'static str) -> Span<'static> {
+fn hint(text: &str) -> Span<'_> {
     Span::styled(text, Style::default().fg(FG))
 }
 fn pct(used: u64, total: u64) -> u64 {
