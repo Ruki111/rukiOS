@@ -56,6 +56,7 @@ Run `cargo run --bin ruki-monitor` from the repository root, or run `ruki-monito
 | `/`, then type | Filter processes by name, user, or PID; Enter applies, Escape cancels. |
 | `s` | Cycle process sorting by CPU, memory, then PID. |
 | `t` | Toggle hierarchical tree and flat process views. |
+| `x` | Request a graceful stop for the selected process; `y` / Enter confirms, `n` / Escape cancels. PID 1 and the monitor itself are protected. |
 | `r` | Refresh readings immediately. |
 | `q` / `Esc` | Quit the monitor. |
 

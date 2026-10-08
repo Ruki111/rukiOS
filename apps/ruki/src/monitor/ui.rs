@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     io,
+    process::Command,
     time::{Duration, Instant},
 };
 
@@ -15,7 +16,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Sparkline, Table, Wrap},
+    widgets::{Block, Borders, Cell, Clear, Gauge, Paragraph, Row, Sparkline, Table, Wrap},
 };
 
 use crate::monitor::processes::ProcessInfo;
@@ -43,12 +44,15 @@ struct App {
     last_sample: Instant,
     process_offset: usize,
     process_visible_rows: usize,
+    selected_process: usize,
     selected_panel: usize,
     process_filter: String,
     filter_before_edit: String,
     filter_input: bool,
     process_sort: ProcessSort,
     tree_view: bool,
+    confirming_termination: Option<(u32, String)>,
+    process_status: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -86,12 +90,15 @@ impl App {
             last_sample: Instant::now(),
             process_offset: 0,
             process_visible_rows: 1,
+            selected_process: 0,
             selected_panel: 0,
             process_filter: String::new(),
             filter_before_edit: String::new(),
             filter_input: false,
             process_sort: ProcessSort::Cpu,
             tree_view: true,
+            confirming_termination: None,
+            process_status: None,
         }
     }
 
@@ -100,11 +107,16 @@ impl App {
             if self.last_sample.elapsed() >= Duration::from_secs(1) {
                 self.metrics = self.sampler.sample();
                 self.last_sample = Instant::now();
-                self.process_offset = self.process_offset.min(self.process_max_offset());
+                self.clamp_process_selection();
             }
             terminal.draw(|frame| self.draw(frame))?;
             if event::poll(Duration::from_millis(100))? {
                 match event::read()? {
+                    Event::Key(key) if self.confirming_termination.is_some() => match key.code {
+                        KeyCode::Char('y') | KeyCode::Enter => self.confirm_termination(),
+                        KeyCode::Char('n') | KeyCode::Esc => self.cancel_termination(),
+                        _ => {}
+                    },
                     Event::Key(key) if self.filter_input => {
                         match key.code {
                             KeyCode::Char(character) => self.process_filter.push(character),
@@ -119,57 +131,70 @@ impl App {
                             _ => {}
                         }
                         self.process_offset = 0;
+                        self.selected_process = 0;
                     }
-                    Event::Key(key) => match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => break,
-                        KeyCode::Char('/') => {
-                            self.selected_panel = 5;
-                            self.filter_before_edit.clone_from(&self.process_filter);
-                            self.filter_input = true;
-                            self.process_offset = 0;
+                    Event::Key(key) => {
+                        self.process_status = None;
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => break,
+                            KeyCode::Char('/') => {
+                                self.selected_panel = 5;
+                                self.filter_before_edit.clone_from(&self.process_filter);
+                                self.filter_input = true;
+                                self.process_offset = 0;
+                                self.selected_process = 0;
+                            }
+                            KeyCode::Char('s') if self.selected_panel == 5 => {
+                                self.process_sort = self.process_sort.next();
+                                self.process_offset = 0;
+                                self.selected_process = 0;
+                            }
+                            KeyCode::Char('t') if self.selected_panel == 5 => {
+                                self.tree_view = !self.tree_view;
+                                self.process_offset = 0;
+                                self.selected_process = 0;
+                            }
+                            KeyCode::Char('x') if self.selected_panel == 5 => {
+                                self.request_termination();
+                            }
+                            KeyCode::Char('r') => {
+                                self.metrics = self.sampler.sample();
+                                self.last_sample = Instant::now();
+                                self.clamp_process_selection();
+                            }
+                            KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
+                                self.selected_panel = (self.selected_panel + 1) % 6
+                            }
+                            KeyCode::Char(number @ '1'..='6') => {
+                                self.selected_panel = number.to_digit(10).unwrap_or(1) as usize - 1;
+                            }
+                            KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
+                                self.selected_panel =
+                                    self.selected_panel.checked_sub(1).unwrap_or(5)
+                            }
+                            KeyCode::Down | KeyCode::Char('j') if self.selected_panel == 5 => {
+                                self.move_process_selection(1);
+                            }
+                            KeyCode::Up | KeyCode::Char('k') if self.selected_panel == 5 => {
+                                self.move_process_selection(-1);
+                            }
+                            KeyCode::PageDown if self.selected_panel == 5 => {
+                                self.move_process_selection(self.process_visible_rows as isize);
+                            }
+                            KeyCode::PageUp if self.selected_panel == 5 => {
+                                self.move_process_selection(-(self.process_visible_rows as isize));
+                            }
+                            KeyCode::Home | KeyCode::Char('g') if self.selected_panel == 5 => {
+                                self.selected_process = 0;
+                                self.process_offset = 0;
+                            }
+                            KeyCode::End | KeyCode::Char('G') if self.selected_panel == 5 => {
+                                self.selected_process = self.process_list().len().saturating_sub(1);
+                                self.process_offset = self.process_max_offset();
+                            }
+                            _ => {}
                         }
-                        KeyCode::Char('s') if self.selected_panel == 5 => {
-                            self.process_sort = self.process_sort.next();
-                            self.process_offset = 0;
-                        }
-                        KeyCode::Char('t') if self.selected_panel == 5 => {
-                            self.tree_view = !self.tree_view;
-                            self.process_offset = 0;
-                        }
-                        KeyCode::Char('r') => {
-                            self.metrics = self.sampler.sample();
-                            self.last_sample = Instant::now();
-                        }
-                        KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
-                            self.selected_panel = (self.selected_panel + 1) % 6
-                        }
-                        KeyCode::Char(number @ '1'..='6') => {
-                            self.selected_panel = number.to_digit(10).unwrap_or(1) as usize - 1;
-                        }
-                        KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
-                            self.selected_panel = self.selected_panel.checked_sub(1).unwrap_or(5)
-                        }
-                        KeyCode::Down | KeyCode::Char('j') if self.selected_panel == 5 => {
-                            self.process_offset =
-                                (self.process_offset + 1).min(self.process_max_offset());
-                        }
-                        KeyCode::Up | KeyCode::Char('k') if self.selected_panel == 5 => {
-                            self.process_offset = self.process_offset.saturating_sub(1)
-                        }
-                        KeyCode::PageDown if self.selected_panel == 5 => {
-                            self.scroll_processes(self.process_visible_rows as isize);
-                        }
-                        KeyCode::PageUp if self.selected_panel == 5 => {
-                            self.scroll_processes(-(self.process_visible_rows as isize));
-                        }
-                        KeyCode::Home | KeyCode::Char('g') if self.selected_panel == 5 => {
-                            self.process_offset = 0;
-                        }
-                        KeyCode::End | KeyCode::Char('G') if self.selected_panel == 5 => {
-                            self.process_offset = self.process_max_offset();
-                        }
-                        _ => {}
-                    },
+                    }
                     Event::Mouse(mouse)
                         if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) =>
                     {
@@ -225,10 +250,11 @@ impl App {
             self.draw_compact_header(frame, layout[0]);
             if self.selected_panel == 5 {
                 self.process_visible_rows = layout[1].height.saturating_sub(3).max(1) as usize;
-                self.process_offset = self.process_offset.min(self.process_max_offset());
+                self.clamp_process_selection();
             }
             self.draw_selected_panel(frame, layout[1]);
             self.draw_footer(frame, layout[2]);
+            self.draw_termination_confirmation(frame, area);
             return;
         }
 
@@ -249,7 +275,7 @@ impl App {
             .constraints([Constraint::Percentage(41), Constraint::Percentage(59)])
             .split(page[2]);
         self.process_visible_rows = lower[1].height.saturating_sub(3).max(1) as usize;
-        self.process_offset = self.process_offset.min(self.process_max_offset());
+        self.clamp_process_selection();
         let left = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -263,6 +289,7 @@ impl App {
         self.draw_network(frame, left[2]);
         self.draw_processes(frame, lower[1]);
         self.draw_footer(frame, page[3]);
+        self.draw_termination_confirmation(frame, area);
     }
 
     fn draw_compact_header(&self, frame: &mut Frame, area: Rect) {
@@ -630,28 +657,39 @@ impl App {
         if self.selected_panel == 5 {
             let message = if self.filter_input {
                 format!("Filter: {}▏  Enter apply  Esc cancel", self.process_filter)
+            } else if let Some(status) = &self.process_status {
+                status.clone()
             } else if area.width >= 90 {
                 format!(
-                    "/ filter   s sort ({})   t {}   j/k rows   PgUp/Dn page   g/G ends   r refresh   q quit",
+                    "/ filter   s sort ({})   t {}   x stop   j/k rows   PgUp/Dn page   g/G ends   r refresh   q quit",
                     self.process_sort.label(),
                     if self.tree_view { "flat" } else { "tree" }
                 )
             } else if area.height > 1 {
                 format!(
-                    "/ filter   s sort ({})   t {}   j/k rows",
+                    "/ filter   s sort ({})   t {}   x stop   j/k rows",
                     self.process_sort.label(),
                     if self.tree_view { "flat" } else { "tree" }
                 )
             } else {
                 format!(
-                    "/filter  s sort  t {}  j/k move  q quit",
+                    "/filter  s sort  t {}  x stop  j/k move",
                     if self.tree_view { "flat" } else { "tree" }
                 )
             };
-            let lines = if !self.filter_input && area.height > 1 && area.width < 90 {
+            let lines = if !self.filter_input
+                && self.process_status.is_none()
+                && area.height > 1
+                && area.width < 90
+            {
                 vec![
                     Line::from(hint(&message)),
                     Line::from(hint("PgUp/Dn page   g/G ends   r refresh   q quit")),
+                ]
+            } else if self.process_status.is_some() && area.height > 1 {
+                vec![
+                    Line::from(hint(&message)),
+                    Line::from(hint("x stop selected   / filter   q quit")),
                 ]
             } else {
                 vec![Line::from(hint(&message))]
@@ -674,6 +712,38 @@ impl App {
             vec![Line::from(hint("1-6 panel  j/k rows  r refresh  q quit"))]
         };
         frame.render_widget(Paragraph::new(lines).style(Style::default().fg(FG)), area);
+    }
+
+    fn draw_termination_confirmation(&self, frame: &mut Frame, area: Rect) {
+        let Some((pid, name)) = &self.confirming_termination else {
+            return;
+        };
+        let width = area.width.min(64);
+        let height = area.height.min(8);
+        let popup = Rect::new(
+            area.x + area.width.saturating_sub(width) / 2,
+            area.y + area.height.saturating_sub(height) / 2,
+            width,
+            height,
+        );
+        frame.render_widget(Clear, popup);
+        let content = Paragraph::new(vec![
+            Line::from(format!("Send SIGTERM to {name} (PID {pid})?")),
+            Line::from("This requests a graceful stop; the process may refuse."),
+            Line::from(Span::styled(
+                "y / Enter confirm    n / Esc cancel",
+                Style::default().fg(ACCENT).bold(),
+            )),
+        ])
+        .style(Style::default().fg(FG).bg(BG))
+        .block(
+            Block::default()
+                .title(" Confirm stop request ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(ACCENT))
+                .style(Style::default().bg(BG)),
+        );
+        frame.render_widget(content, popup);
     }
 
     fn draw_tabs(&self, frame: &mut Frame, area: Rect) {
@@ -730,6 +800,85 @@ impl App {
         max_process_offset(self.process_list().len(), self.process_visible_rows)
     }
 
+    fn clamp_process_selection(&mut self) {
+        let count = self.process_list().len();
+        if count == 0 {
+            self.selected_process = 0;
+            self.process_offset = 0;
+            return;
+        }
+        self.selected_process = self.selected_process.min(count - 1);
+        if self.selected_process < self.process_offset {
+            self.process_offset = self.selected_process;
+        } else if self.selected_process >= self.process_offset + self.process_visible_rows {
+            self.process_offset = self
+                .selected_process
+                .saturating_add(1)
+                .saturating_sub(self.process_visible_rows);
+        }
+        self.process_offset = self.process_offset.min(self.process_max_offset());
+    }
+
+    fn move_process_selection(&mut self, amount: isize) {
+        let count = self.process_list().len();
+        if count == 0 {
+            return;
+        }
+        self.selected_process = move_process_index(self.selected_process, amount, count);
+        self.clamp_process_selection();
+    }
+
+    fn request_termination(&mut self) {
+        let processes = self.process_list();
+        let Some(process) = processes.get(self.selected_process) else {
+            self.process_status = Some("No process is selected.".into());
+            return;
+        };
+        if is_protected_pid(process.pid, std::process::id()) {
+            self.process_status = Some(format!("Refusing to stop protected PID {}.", process.pid));
+            return;
+        }
+        self.confirming_termination = Some((process.pid, process.name.clone()));
+    }
+
+    fn confirm_termination(&mut self) {
+        let Some((pid, name)) = self.confirming_termination.take() else {
+            return;
+        };
+        if is_protected_pid(pid, std::process::id()) {
+            self.process_status = Some(format!("Refusing to stop protected PID {pid}."));
+            return;
+        }
+        let result = Command::new("kill")
+            .args(["-TERM", "--"])
+            .arg(pid.to_string())
+            .output();
+        match result {
+            Ok(output) if output.status.success() => {
+                self.process_status = Some(format!("Sent SIGTERM to {name} (PID {pid})."));
+                self.metrics = self.sampler.sample();
+                self.last_sample = Instant::now();
+                self.clamp_process_selection();
+            }
+            Ok(output) => {
+                let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                self.process_status = Some(if detail.is_empty() {
+                    format!("Could not stop PID {pid}.")
+                } else {
+                    format!("Could not stop PID {pid}: {detail}")
+                });
+            }
+            Err(error) => {
+                self.process_status = Some(format!("Could not run kill: {error}"));
+            }
+        }
+    }
+
+    fn cancel_termination(&mut self) {
+        self.confirming_termination = None;
+        self.process_status = Some("Stop request canceled.".into());
+    }
+
     fn process_list(&self) -> Vec<&ProcessInfo> {
         filtered_processes(
             &self.metrics.processes,
@@ -737,15 +886,6 @@ impl App {
             self.process_sort,
             self.tree_view,
         )
-    }
-
-    fn scroll_processes(&mut self, amount: isize) {
-        self.process_offset = scroll_process_offset(
-            self.process_offset,
-            amount,
-            self.process_list().len(),
-            self.process_visible_rows,
-        );
     }
 
     fn select_tab_at(&mut self, x: u16, y: u16) {
@@ -1046,7 +1186,8 @@ impl App {
             .iter()
             .skip(self.process_offset)
             .take(visible)
-            .map(|p| {
+            .enumerate()
+            .map(|(row_index, p)| {
                 let prefix = if self.tree_view {
                     "  ".repeat(p.depth.min(4))
                 } else {
@@ -1060,7 +1201,16 @@ impl App {
                     format!("{:.1}%", p.memory_percent),
                     format!("{:.1}%", p.cpu_percent),
                 ])
-                .style(Style::default().fg(FG))
+                .style(
+                    if self.process_offset + row_index == self.selected_process {
+                        Style::default()
+                            .fg(FG)
+                            .bg(Color::Rgb(62, 65, 36))
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(FG)
+                    },
+                )
             })
             .collect::<Vec<_>>();
         if processes.is_empty() {
@@ -1276,36 +1426,94 @@ fn max_process_offset(process_count: usize, visible_rows: usize) -> usize {
     process_count.saturating_sub(visible_rows.max(1))
 }
 
-fn scroll_process_offset(
-    current: usize,
-    amount: isize,
-    process_count: usize,
-    visible_rows: usize,
-) -> usize {
-    let maximum = max_process_offset(process_count, visible_rows);
-    (current as isize + amount).clamp(0, maximum as isize) as usize
+fn move_process_index(current: usize, amount: isize, process_count: usize) -> usize {
+    if process_count == 0 {
+        0
+    } else {
+        (current as isize + amount).clamp(0, process_count.saturating_sub(1) as isize) as usize
+    }
+}
+
+fn is_protected_pid(pid: u32, current_pid: u32) -> bool {
+    pid <= 1 || pid == current_pid
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{App, is_compact, is_unusable, max_process_offset, scroll_process_offset};
+    use super::{
+        App, is_compact, is_protected_pid, is_unusable, max_process_offset, move_process_index,
+    };
+    use crate::monitor::processes::ProcessInfo;
     use ratatui::layout::Rect;
     use ratatui::{Terminal, backend::TestBackend};
 
     #[test]
-    fn process_scroll_is_bounded_to_full_visible_pages() {
+    fn process_selection_is_bounded_to_the_list() {
         assert_eq!(max_process_offset(10, 4), 6);
-        assert_eq!(scroll_process_offset(0, -1, 10, 4), 0);
-        assert_eq!(scroll_process_offset(0, 4, 10, 4), 4);
-        assert_eq!(scroll_process_offset(4, 20, 10, 4), 6);
-        assert_eq!(scroll_process_offset(6, 1, 10, 4), 6);
+        assert_eq!(move_process_index(0, -1, 10), 0);
+        assert_eq!(move_process_index(0, 4, 10), 4);
+        assert_eq!(move_process_index(4, 20, 10), 9);
+        assert_eq!(move_process_index(9, 1, 10), 9);
     }
 
     #[test]
     fn empty_process_list_and_zero_viewport_do_not_underflow() {
         assert_eq!(max_process_offset(0, 4), 0);
-        assert_eq!(scroll_process_offset(0, 10, 0, 4), 0);
+        assert_eq!(move_process_index(0, 10, 0), 0);
         assert_eq!(max_process_offset(3, 0), 2);
+    }
+
+    #[test]
+    fn pid_one_and_the_monitor_process_are_protected_from_stop_requests() {
+        assert!(is_protected_pid(1, 99));
+        assert!(is_protected_pid(99, 99));
+        assert!(!is_protected_pid(100, 99));
+    }
+
+    #[test]
+    fn stop_request_waits_for_confirmation_and_can_be_canceled() {
+        let mut app = App::new();
+        app.metrics.processes = vec![ProcessInfo {
+            pid: 4242,
+            ppid: 1,
+            user: "ruki".into(),
+            name: "worker".into(),
+            cpu_percent: 1.0,
+            memory_percent: 2.0,
+            depth: 0,
+        }];
+        app.request_termination();
+        assert_eq!(
+            app.confirming_termination,
+            Some((4242, "worker".to_string()))
+        );
+
+        app.cancel_termination();
+        assert!(app.confirming_termination.is_none());
+        assert_eq!(
+            app.process_status.as_deref(),
+            Some("Stop request canceled.")
+        );
+    }
+
+    #[test]
+    fn stop_confirmation_is_visible_in_the_tui() {
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut app = App::new();
+        app.confirming_termination = Some((4242, "worker".into()));
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+
+        let screen = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(screen.contains("Send SIGTERM to worker (PID 4242)?"));
+        assert!(screen.contains("y / Enter confirm"));
+        assert!(screen.contains("n / Esc cancel"));
     }
 
     #[test]
