@@ -4,6 +4,10 @@ pub(super) fn read_counters() -> HashMap<String, (u64, u64)> {
     let Ok(contents) = fs::read_to_string("/proc/stat") else {
         return HashMap::new();
     };
+    parse_counters(&contents)
+}
+
+fn parse_counters(contents: &str) -> HashMap<String, (u64, u64)> {
     contents
         .lines()
         .filter_map(|line| {
@@ -37,4 +41,32 @@ pub(super) fn usage(previous: &(u64, u64), current: &(u64, u64)) -> Option<f64> 
         return None;
     }
     Some(total_delta.saturating_sub(idle_delta) as f64 / total_delta as f64 * 100.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_total_and_per_core_cpu_counters() {
+        let counters =
+            parse_counters("cpu 100 20 30 40 10 0 0 0 9 9\ncpu0 50 5 10 20 5 0 0 0\nbtime 123\n");
+
+        assert_eq!(counters.get("cpu"), Some(&(200, 50)));
+        assert_eq!(counters.get("cpu0"), Some(&(90, 25)));
+        assert_eq!(counters.len(), 2);
+    }
+
+    #[test]
+    fn ignores_malformed_cpu_lines() {
+        let counters = parse_counters("cpu not-a-number\ncpuX 1 2 3\ncpu1 1 2 invalid 4\n");
+        assert!(counters.is_empty());
+    }
+
+    #[test]
+    fn calculates_usage_and_handles_zero_or_reset_counters() {
+        assert_eq!(usage(&(100, 40), &(160, 70)), Some(50.0));
+        assert_eq!(usage(&(10, 5), &(10, 5)), None);
+        assert_eq!(usage(&(100, 40), &(90, 35)), None);
+    }
 }

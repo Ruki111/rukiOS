@@ -25,7 +25,15 @@ pub(super) fn read_root() -> Option<RootDisk> {
         return None;
     }
     let text = String::from_utf8_lossy(&output.stdout);
-    let fields = text.lines().nth(1)?.split_whitespace().collect::<Vec<_>>();
+    parse_root(&text)
+}
+
+fn parse_root(output: &str) -> Option<RootDisk> {
+    let fields = output
+        .lines()
+        .nth(1)?
+        .split_whitespace()
+        .collect::<Vec<_>>();
     let used_percent = fields.get(4)?.trim_end_matches('%').parse().ok()?;
     Some(RootDisk {
         device: fields.first()?.to_string(),
@@ -68,4 +76,37 @@ fn is_disk(name: &str) -> bool {
     ["sd", "hd", "vd", "xvd", "nvme", "mmcblk"]
         .iter()
         .any(|prefix| name.starts_with(prefix))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_df_root_filesystem_output() {
+        let disk =
+            parse_root("Filesystem 1B-blocks Used Available Use%\n/dev/root 1000 650 350 65%\n")
+                .unwrap();
+
+        assert_eq!(disk.device, "/dev/root");
+        assert_eq!(disk.total_bytes, 1000);
+        assert_eq!(disk.used_bytes, 650);
+        assert_eq!(disk.available_bytes, 350);
+        assert_eq!(disk.used_percent, 65);
+    }
+
+    #[test]
+    fn rejects_missing_or_malformed_df_rows() {
+        assert!(parse_root("Filesystem Size Used Avail Use%\n").is_none());
+        assert!(parse_root("Filesystem Size Used Avail Use%\n/dev/root x 1 2 3%\n").is_none());
+    }
+
+    #[test]
+    fn recognizes_linux_disk_names() {
+        for name in ["sda", "nvme0n1", "mmcblk0", "vda", "xvda"] {
+            assert!(is_disk(name), "expected {name} to be a disk");
+        }
+        assert!(!is_disk("loop0"));
+        assert!(!is_disk("dm-0"));
+    }
 }
