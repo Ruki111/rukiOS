@@ -19,7 +19,7 @@ rukiOS is in early development. The Rust-based `ruki` program runs on an existin
 
 ## Interface
 
-Running `ruki` without a command opens the interactive **System Console**. The standalone **ruki-monitor** is a separate full-screen app that you can run in its own terminal window. Its live metrics refresh once per second. Use Tab or `h`/`l` to move between panels, `1`–`6` or mouse clicks to select Overview, CPU, Memory, Disks, Network, or Processes, `j`/`k` or the arrow keys to scroll processes, Page Up/Down to move a page, Home/End or `g`/`G` to jump to the first/last process page, `r` to refresh, and `q` or Escape to quit. Compact terminals show a one-page Overview with key metrics; select a panel to inspect its details.
+Running `ruki` without a command opens the interactive **System Console**. The standalone **ruki-monitor** is a separate full-screen app that you can run in its own terminal window. Its live metrics refresh once per second. Use Tab or `h`/`l` to move between panels, `1`–`6` or mouse clicks to select Overview, CPU, Memory, Disks, Network, or Processes, `j`/`k` or the arrow keys to select and move through processes, `/` to filter, `s` to cycle sorting by CPU/memory/PID, `t` to toggle the process tree, and `x` to request a graceful stop with confirmation. Page Up/Down moves a page, Home/End or `g`/`G` jumps to the first/last process, `r` refreshes, and `q` or Escape quits. Compact terminals show a one-page Overview with key metrics; select a panel to inspect its details.
 
 Start it from the project directory with:
 

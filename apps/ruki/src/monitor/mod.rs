@@ -3,7 +3,7 @@ mod disk;
 mod gpu;
 mod memory;
 mod network;
-mod processes;
+pub(crate) mod processes;
 mod sensors;
 
 use std::collections::{HashMap, VecDeque};
@@ -124,7 +124,7 @@ impl Sampler {
             network,
             gpus: gpu::read_all(),
             temperatures: sensors::read_all(),
-            processes: processes::read_top(18),
+            processes: processes::read_top(usize::MAX),
             load_average: read_first_fields("/proc/loadavg", 3)
                 .unwrap_or_else(|| "unavailable".into()),
             uptime: uptime(),
