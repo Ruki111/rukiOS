@@ -6,3 +6,5 @@ description = "A terminal-first system management CLI for rukiOS"
 license = "MIT"
 
 [dependencies]
+crossterm = "0.29"
+ratatui = "0.30.2"

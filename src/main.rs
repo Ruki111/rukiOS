@@ -3,6 +3,8 @@ use std::fs;
 use std::process::Command;
 use std::time::Duration;
 
+mod tui;
+
 fn main() {
     let mut args = std::env::args().skip(1);
 
@@ -39,7 +41,13 @@ fn main() {
             }
             show_processes(limit);
         }
-        Some("help") | Some("--help") | Some("-h") | None => show_help(),
+        Some("help") | Some("--help") | Some("-h") => show_help(),
+        None => {
+            if let Err(error) = tui::run() {
+                eprintln!("Could not start the rukiOS TUI: {error}");
+                std::process::exit(1);
+            }
+        }
         Some(command) => {
             eprintln!("Unknown command: {command}\n");
             show_help();
@@ -51,7 +59,8 @@ fn main() {
 fn show_help() {
     println!("ruki — a terminal-first system management CLI\n");
     println!("Usage: ruki <command> [arguments]");
-    println!("       cargo run -- <command>  (from the project folder)\n");
+    println!("       ruki                    Open the interactive TUI");
+    println!("       cargo run               Open the TUI from the project folder\n");
     println!("Commands:");
     println!("  system    Show basic system information");
     println!("  disk      Show disk space for mounted filesystems");
@@ -63,6 +72,7 @@ fn show_help() {
     println!("  help      Show this help message");
     println!("\nExamples:");
     println!("  cargo run -- help");
+    println!("  cargo run");
     println!("  cargo run -- system");
     println!("  cargo run -- disk");
     println!("  cargo run -- memory");

@@ -6,7 +6,7 @@ rukiOS reuses the Linux kernel, Arch's package ecosystem, and mature tools such 
 
 ## Project status
 
-rukiOS is in early development. Its first milestone is a Rust-based `ruki` CLI that runs on an existing Linux installation. Building a custom ISO comes later.
+rukiOS is in early development. The Rust-based `ruki` program runs on an existing Linux installation and now has an initial full-screen TUI alongside its CLI commands. Building a custom ISO comes later.
 
 ## Vision
 
@@ -17,9 +17,17 @@ rukiOS is in early development. Its first milestone is a Rust-based `ruki` CLI t
 - Keep the system minimal, keyboard-driven, and comfortable for developers.
 - Support graphical applications and, optionally, a replaceable Wayland compositor such as Sway or Hyprland.
 
-## CLI
+## Interface
 
-The current CLI provides these system information commands:
+Running the program without a command opens the interactive full-screen TUI. It keeps a consistent system snapshot while you navigate; press `r` to refresh it. Use `j`/`k` or `h`/`l` to move between sections, `1`–`8` to jump to a section, `g`/`G` for the first/last section, `Ctrl-u`/`Ctrl-d` to scroll, and `q` or Escape to quit. Arrow keys and Page Up/Page Down also work.
+
+Start it from the project directory with:
+
+```bash
+cargo run
+```
+
+The TUI has an overview and sections for system information, disk, memory, network, processes, services, and health. The command-line commands are still available for scripts and quick checks:
 
 ```bash
 cargo run -- system
@@ -38,7 +46,7 @@ Run these commands from the project directory. Once installed, use `ruki` in pla
 
 `health` summarizes memory, root disk usage, and active network interfaces. It reports `WARN` when disk use reaches 85% or memory use reaches 90%, and `UNKNOWN` when a reading is unavailable. The JSON form provides the same checks in a machine-readable format.
 
-The CLI currently relies on standard Linux utilities: `df`, `ip`, `ps`, `systemctl`, and `uname`. Some commands require the corresponding utility or systemd to be available.
+The interface uses Ratatui and Crossterm. System details rely on standard Linux utilities: `df`, `ip`, `ps`, `systemctl`, and `uname`. Some sections require the corresponding utility or systemd to be available.
 
 Commands for packages, files, and natural-language requests are planned for later.
 
@@ -50,11 +58,10 @@ ruki "install Docker and start it automatically"
 
 ## Development direction
 
-1. Build the Rust CLI for use on existing Arch installations.
-2. Add a TUI for system management.
-3. Expand system-management capabilities.
-4. Integrate AI with clear plans and safe execution controls.
-5. Package the rukiOS experience and eventually build a custom ISO.
+1. Expand the Rust CLI and TUI for use on existing Arch installations.
+2. Improve system-management capabilities and usability.
+3. Integrate AI with clear plans and safe execution controls.
+4. Package the rukiOS experience and eventually build a custom ISO.
 
 ## Technology
 
