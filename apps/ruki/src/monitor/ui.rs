@@ -122,7 +122,7 @@ impl App {
             frame.area(),
         );
         let area = frame.area();
-        if area.width < 80 || area.height < 24 {
+        if is_too_small(area) {
             let message = Paragraph::new(vec![
                 Line::from(Span::styled(
                     "rukiOS SYSTEM MONITOR",
@@ -248,15 +248,16 @@ impl App {
     }
 
     fn process_max_offset(&self) -> usize {
-        self.metrics
-            .processes
-            .len()
-            .saturating_sub(self.process_visible_rows.max(1))
+        max_process_offset(self.metrics.processes.len(), self.process_visible_rows)
     }
 
     fn scroll_processes(&mut self, amount: isize) {
-        let next = self.process_offset as isize + amount;
-        self.process_offset = next.clamp(0, self.process_max_offset() as isize) as usize;
+        self.process_offset = scroll_process_offset(
+            self.process_offset,
+            amount,
+            self.metrics.processes.len(),
+            self.process_visible_rows,
+        );
     }
 
     fn select_tab_at(&mut self, x: u16, y: u16) {
@@ -539,6 +540,73 @@ impl App {
         .block(panel("PROCESSES · CPU SORT", self.selected_panel == 4))
         .column_spacing(1);
         frame.render_widget(table, area);
+    }
+}
+
+fn is_too_small(area: Rect) -> bool {
+    area.width < 80 || area.height < 24
+}
+
+fn max_process_offset(process_count: usize, visible_rows: usize) -> usize {
+    process_count.saturating_sub(visible_rows.max(1))
+}
+
+fn scroll_process_offset(
+    current: usize,
+    amount: isize,
+    process_count: usize,
+    visible_rows: usize,
+) -> usize {
+    let maximum = max_process_offset(process_count, visible_rows);
+    (current as isize + amount).clamp(0, maximum as isize) as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{App, is_too_small, max_process_offset, scroll_process_offset};
+    use ratatui::layout::Rect;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    #[test]
+    fn process_scroll_is_bounded_to_full_visible_pages() {
+        assert_eq!(max_process_offset(10, 4), 6);
+        assert_eq!(scroll_process_offset(0, -1, 10, 4), 0);
+        assert_eq!(scroll_process_offset(0, 4, 10, 4), 4);
+        assert_eq!(scroll_process_offset(4, 20, 10, 4), 6);
+        assert_eq!(scroll_process_offset(6, 1, 10, 4), 6);
+    }
+
+    #[test]
+    fn empty_process_list_and_zero_viewport_do_not_underflow() {
+        assert_eq!(max_process_offset(0, 4), 0);
+        assert_eq!(scroll_process_offset(0, 10, 0, 4), 0);
+        assert_eq!(max_process_offset(3, 0), 2);
+    }
+
+    #[test]
+    fn minimum_terminal_size_is_checked_at_boundary() {
+        assert!(is_too_small(Rect::new(0, 0, 79, 24)));
+        assert!(is_too_small(Rect::new(0, 0, 80, 23)));
+        assert!(!is_too_small(Rect::new(0, 0, 80, 24)));
+    }
+
+    #[test]
+    fn small_terminal_render_explains_how_to_recover() {
+        let backend = TestBackend::new(79, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut app = App::new();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+
+        let screen = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(screen.contains("Terminal is too small"));
+        assert!(screen.contains("80 columns by 24 rows"));
+        assert!(screen.contains("Press q or Escape to quit"));
     }
 }
 
