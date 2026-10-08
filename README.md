@@ -29,7 +29,7 @@ cargo run --bin ruki
 cargo run --bin ruki-monitor
 ```
 
-The monitor dashboard shows CPU load and per-core usage, recent CPU history, available GPU and temperature readings, memory and swap, root disk capacity and disk I/O, network throughput, and processes sorted by CPU. Hardware sensor support depends on what Linux exposes on the machine; unavailable values are shown as unavailable. The System Console sections cover overview, system information, disk, memory, network, processes, services, health, and recent logs. The command-line commands are still available for scripts and quick checks:
+The monitor dashboard shows CPU load and per-core usage, recent CPU history, available GPU and temperature readings, memory and swap, root disk capacity and disk I/O, network throughput, and processes sorted by CPU. Hardware sensor support depends on what Linux exposes on the machine; unavailable values are shown as unavailable. The System Console sections cover overview, system information, disk, memory, network, processes, services, health, and recent logs. Its Services section can search and inspect systemd units and request start, stop, or restart after an in-app confirmation; systemd permissions still apply. The command-line commands are still available for scripts and quick checks:
 
 ```bash
 cargo run -- system
