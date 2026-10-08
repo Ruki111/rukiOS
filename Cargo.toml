@@ -1,8 +1,13 @@
-[package]
-name = "ruki"
+[workspace]
+resolver = "3"
+members = ["apps/ruki"]
+default-members = ["apps/ruki"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
-description = "A terminal-first system management CLI for rukiOS"
 license = "MIT"
 
-[dependencies]
+[workspace.dependencies]
+crossterm = "0.29"
+ratatui = "0.30.2"

@@ -1,0 +1,11 @@
+[package]
+name = "ruki"
+default-run = "ruki"
+version.workspace = true
+edition.workspace = true
+description = "A terminal-first system management CLI for rukiOS"
+license.workspace = true
+
+[dependencies]
+crossterm.workspace = true
+ratatui.workspace = true

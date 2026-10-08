@@ -6,7 +6,7 @@ rukiOS reuses the Linux kernel, Arch's package ecosystem, and mature tools such 
 
 ## Project status
 
-rukiOS is at the early planning and development stage. The first milestone is a Rust-based `ruki` CLI that works on an existing Arch Linux installation. Building a custom ISO comes later.
+rukiOS is in early development. The Rust-based `ruki` program runs on an existing Linux installation and now has an initial full-screen TUI alongside its CLI commands. Building a custom ISO comes later.
 
 ## Vision
 
@@ -17,22 +17,44 @@ rukiOS is at the early planning and development stage. The first milestone is a 
 - Keep the system minimal, keyboard-driven, and comfortable for developers.
 - Support graphical applications and, optionally, a replaceable Wayland compositor such as Sway or Hyprland.
 
-## Planned CLI
+## Interface
 
-The initial CLI milestone focuses on:
+Running `ruki` without a command opens the interactive **System Console**. The standalone **ruki-monitor** is a separate full-screen app that you can run in its own terminal window. Its live metrics refresh once per second. Use Tab or `h`/`l` to move focus, `j`/`k` to move through processes, `r` to refresh, and `q` or Escape to quit.
 
-```bash
-ruki system
-ruki services
-```
-
-The broader interface may grow to include commands such as:
+Start it from the project directory with:
 
 ```bash
-ruki network
-ruki packages
-ruki files
+cargo run --bin ruki
+# In another terminal window:
+cargo run --bin ruki-monitor
 ```
+
+The monitor dashboard shows CPU load and per-core usage, recent CPU history, available GPU and temperature readings, memory and swap, root disk capacity and disk I/O, network throughput, and processes sorted by CPU. Hardware sensor support depends on what Linux exposes on the machine; unavailable values are shown as unavailable. The System Console sections cover overview, system information, disk, memory, network, processes, services, health, and recent logs. The command-line commands are still available for scripts and quick checks:
+
+```bash
+cargo run -- system
+cargo run -- disk
+cargo run -- memory
+cargo run -- network
+cargo run -- logs          # show the latest 40 journal entries
+cargo run -- logs 100      # choose how many entries to show
+cargo run -- processes       # show the top 10 by CPU use
+cargo run -- processes 20    # choose how many processes to show
+cargo run -- services       # list active systemd services
+cargo run -- health
+cargo run -- health --json
+cargo run -- help
+```
+
+Run these commands from the project directory. Once installed, use `ruki` in place of `cargo run --`.
+
+`health` summarizes memory, root disk usage, and active network interfaces. It reports `WARN` when disk use reaches 85% or memory use reaches 90%, and `UNKNOWN` when a reading is unavailable. The JSON form provides the same checks in a machine-readable format.
+
+The interface uses Ratatui and Crossterm. System details rely on standard Linux utilities: `df`, `ip`, `ps`, `systemctl`, `journalctl`, and `uname`. Some sections require the corresponding utility or systemd to be available. Access to system logs depends on the journal permissions of the current user.
+
+The repository workspace and planned package boundaries are described in [docs/architecture/PROJECT_STRUCTURE.md](docs/architecture/PROJECT_STRUCTURE.md).
+
+Commands for packages, files, and natural-language requests are planned for later.
 
 Natural-language requests are a longer-term goal, for example:
 
@@ -42,11 +64,10 @@ ruki "install Docker and start it automatically"
 
 ## Development direction
 
-1. Build the Rust CLI for use on existing Arch installations.
-2. Add a TUI for system management.
-3. Expand system-management capabilities.
-4. Integrate AI with clear plans and safe execution controls.
-5. Package the rukiOS experience and eventually build a custom ISO.
+1. Expand the Rust CLI and TUI for use on existing Arch installations.
+2. Improve system-management capabilities and usability.
+3. Integrate AI with clear plans and safe execution controls.
+4. Package the rukiOS experience and eventually build a custom ISO.
 
 ## Technology
 
