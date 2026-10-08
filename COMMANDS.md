@@ -49,7 +49,7 @@ Run `cargo run --bin ruki-monitor` from the repository root, or run `ruki-monito
 | Keys / input | Action |
 | --- | --- |
 | `Tab`, `h` / `l`, `←` / `→` | Move between dashboard panels. |
-| `1`–`5` or mouse click | Select CPU, Memory, Disks, Network, or Processes. |
+| `1`–`6` or mouse click | Select Overview, CPU, Memory, Disks, Network, or Processes. |
 | `j` / `k`, `↓` / `↑` | Scroll the process list when Processes is selected. |
 | `Page Up` / `Page Down` | Move one process-list page. |
 | `g` / `G`, `Home` / `End` | Jump to the first or last process-list page. |

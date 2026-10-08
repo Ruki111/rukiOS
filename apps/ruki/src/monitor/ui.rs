@@ -14,7 +14,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Sparkline, Table, Wrap},
+    widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Sparkline, Table, Wrap},
 };
 
 use crate::monitor::{Metrics, Sampler};
@@ -75,31 +75,31 @@ impl App {
                             self.last_sample = Instant::now();
                         }
                         KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
-                            self.selected_panel = (self.selected_panel + 1) % 5
+                            self.selected_panel = (self.selected_panel + 1) % 6
                         }
-                        KeyCode::Char(number @ '1'..='5') => {
+                        KeyCode::Char(number @ '1'..='6') => {
                             self.selected_panel = number.to_digit(10).unwrap_or(1) as usize - 1;
                         }
                         KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
-                            self.selected_panel = self.selected_panel.checked_sub(1).unwrap_or(4)
+                            self.selected_panel = self.selected_panel.checked_sub(1).unwrap_or(5)
                         }
-                        KeyCode::Down | KeyCode::Char('j') if self.selected_panel == 4 => {
+                        KeyCode::Down | KeyCode::Char('j') if self.selected_panel == 5 => {
                             self.process_offset =
                                 (self.process_offset + 1).min(self.process_max_offset());
                         }
-                        KeyCode::Up | KeyCode::Char('k') if self.selected_panel == 4 => {
+                        KeyCode::Up | KeyCode::Char('k') if self.selected_panel == 5 => {
                             self.process_offset = self.process_offset.saturating_sub(1)
                         }
-                        KeyCode::PageDown if self.selected_panel == 4 => {
+                        KeyCode::PageDown if self.selected_panel == 5 => {
                             self.scroll_processes(self.process_visible_rows as isize);
                         }
-                        KeyCode::PageUp if self.selected_panel == 4 => {
+                        KeyCode::PageUp if self.selected_panel == 5 => {
                             self.scroll_processes(-(self.process_visible_rows as isize));
                         }
-                        KeyCode::Home | KeyCode::Char('g') if self.selected_panel == 4 => {
+                        KeyCode::Home | KeyCode::Char('g') if self.selected_panel == 5 => {
                             self.process_offset = 0;
                         }
-                        KeyCode::End | KeyCode::Char('G') if self.selected_panel == 4 => {
+                        KeyCode::End | KeyCode::Char('G') if self.selected_panel == 5 => {
                             self.process_offset = self.process_max_offset();
                         }
                         _ => {}
@@ -122,14 +122,14 @@ impl App {
             frame.area(),
         );
         let area = frame.area();
-        if is_too_small(area) {
+        if is_unusable(area) {
             let message = Paragraph::new(vec![
                 Line::from(Span::styled(
                     "rukiOS SYSTEM MONITOR",
                     Style::default().fg(ACCENT).bold(),
                 )),
-                Line::from("Terminal is too small for the dashboard."),
-                Line::from("Resize to at least 80 columns by 24 rows."),
+                Line::from("Terminal is too small to show a panel."),
+                Line::from("Resize to at least 40 columns by 12 rows."),
                 Line::from("Press q or Escape to quit."),
             ])
             .style(Style::default().fg(FG))
@@ -141,6 +141,31 @@ impl App {
             frame.render_widget(message, area);
             return;
         }
+
+        // On compact terminals show one complete, keyboard-selectable panel.
+        // This keeps the memory and swap rows visible instead of squeezing the
+        // dashboard until lower rows disappear below the screen.
+        if is_compact(area) {
+            let header_height = if area.width >= 65 { 2 } else { 1 };
+            let footer_height = if area.height >= 15 { 2 } else { 1 };
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(header_height),
+                    Constraint::Min(1),
+                    Constraint::Length(footer_height),
+                ])
+                .split(area);
+            self.draw_compact_header(frame, layout[0]);
+            if self.selected_panel == 5 {
+                self.process_visible_rows = layout[1].height.saturating_sub(3).max(1) as usize;
+                self.process_offset = self.process_offset.min(self.process_max_offset());
+            }
+            self.draw_selected_panel(frame, layout[1]);
+            self.draw_footer(frame, layout[2]);
+            return;
+        }
+
         let page = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -171,34 +196,390 @@ impl App {
         self.draw_disks(frame, left[1]);
         self.draw_network(frame, left[2]);
         self.draw_processes(frame, lower[1]);
-        let footer = Paragraph::new(vec![
-            Line::from(vec![
-                key("Tab/h/l"),
-                hint(" tabs  "),
-                key("1-5"),
-                hint(" jump  "),
-                key("j/k/↑↓"),
-                hint(" rows  "),
-                key("PgUp/Dn"),
-                hint(" page"),
-            ]),
-            Line::from(vec![
-                key("g/G"),
-                hint(" first/last page  "),
-                key("click"),
-                hint(" tabs  "),
-                key("r"),
-                hint(" refresh  "),
-                key("q/Esc"),
-                hint(" quit"),
-            ]),
-        ])
-        .style(Style::default().fg(FG));
-        frame.render_widget(footer, page[3]);
+        self.draw_footer(frame, page[3]);
+    }
+
+    fn draw_compact_header(&self, frame: &mut Frame, area: Rect) {
+        let names = ["Overview", "CPU", "Memory", "Disks", "Network", "Processes"];
+        if area.height > 1 && area.width >= 65 {
+            let tabs = names
+                .iter()
+                .enumerate()
+                .map(|(index, name)| {
+                    let label = format!(" {}:{} ", index + 1, name);
+                    if self.selected_panel == index {
+                        Span::styled(label, Style::default().fg(BG).bg(ACCENT).bold())
+                    } else {
+                        Span::styled(label, Style::default().fg(FG))
+                    }
+                })
+                .collect::<Vec<_>>();
+            frame.render_widget(
+                Paragraph::new(vec![
+                    Line::from(vec![
+                        Span::styled(" rukiOS ", Style::default().fg(BG).bg(ACCENT).bold()),
+                        Span::styled(" SYSTEM MONITOR", Style::default().fg(FG).bold()),
+                        Span::styled(
+                            format!(
+                                "   UP {}   LOAD {}",
+                                self.metrics.uptime, self.metrics.load_average
+                            ),
+                            Style::default().fg(MUTED),
+                        ),
+                    ]),
+                    Line::from(tabs),
+                ]),
+                area,
+            );
+        } else {
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(" rukiOS ", Style::default().fg(BG).bg(ACCENT).bold()),
+                    Span::styled(" MONITOR · ", Style::default().fg(FG).bold()),
+                    Span::styled(
+                        names[self.selected_panel],
+                        Style::default().fg(ACCENT).bold(),
+                    ),
+                    Span::styled("  (1–6 panels)", Style::default().fg(MUTED)),
+                ])),
+                area,
+            );
+        }
+    }
+
+    fn draw_selected_panel(&self, frame: &mut Frame, area: Rect) {
+        match self.selected_panel {
+            0 => self.draw_compact_overview(frame, area),
+            1 => self.draw_cpu(frame, area),
+            2 => self.draw_memory(frame, area),
+            3 => self.draw_disks(frame, area),
+            4 => self.draw_network(frame, area),
+            _ => self.draw_processes(frame, area),
+        }
+    }
+
+    fn draw_compact_overview(&self, frame: &mut Frame, area: Rect) {
+        if area.width >= 72 && area.height >= 16 {
+            self.draw_overview_dashboard(frame, area);
+            return;
+        }
+
+        let mut lines = vec![Line::from(vec![
+            Span::styled("CPU ", Style::default().fg(ACCENT).bold()),
+            Span::styled(
+                self.metrics
+                    .cpu_percent
+                    .map(|value| format!("{value:.0}%"))
+                    .unwrap_or_else(|| "N/A".into()),
+                Style::default().fg(FG).bold(),
+            ),
+        ])];
+
+        if let Some(memory) = self.metrics.memory {
+            lines.push(Line::from(format!(
+                "RAM  {} / {}  {}%",
+                bytes(memory.used_kib * 1024),
+                bytes(memory.total_kib * 1024),
+                pct(memory.used_kib, memory.total_kib)
+            )));
+            lines.push(Line::from(format!(
+                "Swap {} / {}  {}%",
+                bytes(memory.swap_used_kib * 1024),
+                bytes(memory.swap_total_kib * 1024),
+                pct(memory.swap_used_kib, memory.swap_total_kib)
+            )));
+        } else {
+            lines.push(Line::from("RAM / swap unavailable"));
+        }
+
+        if let Some(disk) = &self.metrics.root_disk {
+            lines.push(Line::from(format!(
+                "Disk {}% used  {} free",
+                disk.used_percent,
+                bytes(disk.available_bytes)
+            )));
+        } else {
+            lines.push(Line::from("Disk unavailable"));
+        }
+
+        if let Some(network) = self.metrics.network.first() {
+            lines.push(Line::from(format!(
+                "Net {}  ↓ {}/s  ↑ {}/s",
+                network.name,
+                network
+                    .rx_bytes_per_sec
+                    .map(bytes)
+                    .unwrap_or_else(|| "—".into()),
+                network
+                    .tx_bytes_per_sec
+                    .map(bytes)
+                    .unwrap_or_else(|| "—".into())
+            )));
+        } else {
+            lines.push(Line::from("Network unavailable"));
+        }
+
+        if let Some(gpu) = self.metrics.gpus.first() {
+            lines.push(Line::from(format!(
+                "GPU {}  {}",
+                gpu.utilization_percent
+                    .map(|value| format!("{value}%"))
+                    .unwrap_or_else(|| "N/A".into()),
+                gpu.temperature_celsius
+                    .map(|value| format!("{value:.0}°C"))
+                    .unwrap_or_else(|| "N/A".into())
+            )));
+        }
+
+        if self.metrics.processes.is_empty() {
+            lines.push(Line::from("Process data unavailable"));
+        } else {
+            let count = if area.height < 12 { 1 } else { 3 };
+            lines.extend(self.metrics.processes.iter().take(count).map(|process| {
+                Line::from(format!(
+                    "Proc {}  {:.1}% CPU  {:.1}% MEM",
+                    process.name, process.cpu_percent, process.memory_percent
+                ))
+            }));
+        }
+
+        frame.render_widget(
+            Paragraph::new(lines)
+                .block(panel("OVERVIEW", self.selected_panel == 0))
+                .wrap(Wrap { trim: true }),
+            area,
+        );
+    }
+
+    fn draw_overview_dashboard(&self, frame: &mut Frame, area: Rect) {
+        let outer = panel("OVERVIEW", self.selected_panel == 0);
+        let inner = outer.inner(area);
+        frame.render_widget(outer, area);
+
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Min(4),
+            ])
+            .split(inner);
+        let top = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(rows[0]);
+        let bottom = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(rows[1]);
+
+        let cpu_block = panel("CPU / GPU", false);
+        let cpu_inner = cpu_block.inner(top[0]);
+        frame.render_widget(cpu_block, top[0]);
+        let cpu_rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(1),
+            ])
+            .split(cpu_inner);
+        let cpu_pct = self.metrics.cpu_percent.unwrap_or(0.0).clamp(0.0, 100.0) as u16;
+        frame.render_widget(
+            Gauge::default()
+                .gauge_style(Style::default().fg(usage_color(cpu_pct as f64)))
+                .percent(cpu_pct)
+                .label(format!("CPU {}%", cpu_pct)),
+            cpu_rows[0],
+        );
+        let gpu_line = self
+            .metrics
+            .gpus
+            .first()
+            .map(|gpu| {
+                format!(
+                    "GPU {}  {}  {}",
+                    gpu.utilization_percent
+                        .map(|value| format!("{value}%"))
+                        .unwrap_or_else(|| "N/A".into()),
+                    gpu.temperature_celsius
+                        .map(|value| format!("{value:.0}°C"))
+                        .unwrap_or_else(|| "N/A".into()),
+                    gpu.memory_used_bytes
+                        .zip(gpu.memory_total_bytes)
+                        .map(|(used, total)| format!("{} / {}", bytes(used), bytes(total)))
+                        .unwrap_or_default()
+                )
+            })
+            .unwrap_or_else(|| "GPU metrics unavailable".into());
+        frame.render_widget(
+            Paragraph::new(gpu_line).style(Style::default().fg(FG)),
+            cpu_rows[1],
+        );
+        frame.render_widget(
+            Sparkline::default()
+                .data(&self.metrics.cpu_history)
+                .style(Style::default().fg(ACCENT))
+                .max(100),
+            cpu_rows[2],
+        );
+
+        let memory_block = panel("MEMORY", false);
+        let memory_inner = memory_block.inner(top[1]);
+        frame.render_widget(memory_block, top[1]);
+        let memory_rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(1),
+            ])
+            .split(memory_inner);
+        if let Some(memory) = self.metrics.memory {
+            let ram_pct = pct(memory.used_kib, memory.total_kib).min(100) as u16;
+            frame.render_widget(
+                Gauge::default()
+                    .gauge_style(Style::default().fg(usage_color(ram_pct as f64)))
+                    .percent(ram_pct)
+                    .label(format!(
+                        "RAM {} / {}  {ram_pct}%",
+                        bytes(memory.used_kib * 1024),
+                        bytes(memory.total_kib * 1024)
+                    )),
+                memory_rows[0],
+            );
+            let swap_pct = pct(memory.swap_used_kib, memory.swap_total_kib).min(100) as u16;
+            frame.render_widget(
+                Gauge::default()
+                    .gauge_style(Style::default().fg(usage_color(swap_pct as f64)))
+                    .percent(swap_pct)
+                    .label(format!(
+                        "Swap {} / {}  {swap_pct}%",
+                        bytes(memory.swap_used_kib * 1024),
+                        bytes(memory.swap_total_kib * 1024)
+                    )),
+                memory_rows[1],
+            );
+        } else {
+            frame.render_widget(Paragraph::new("Memory metrics unavailable"), memory_rows[0]);
+        }
+
+        let disk_block = panel("ROOT DISK", false);
+        let disk_inner = disk_block.inner(bottom[0]);
+        frame.render_widget(disk_block, bottom[0]);
+        if let Some(disk) = &self.metrics.root_disk {
+            let disk_rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(1), Constraint::Min(1)])
+                .split(disk_inner);
+            let disk_pct = disk.used_percent.min(100) as u16;
+            frame.render_widget(
+                Gauge::default()
+                    .gauge_style(Style::default().fg(if disk_pct >= 85 { RED } else { GREEN }))
+                    .percent(disk_pct)
+                    .label(format!("{}  {disk_pct}% used", disk.device)),
+                disk_rows[0],
+            );
+            frame.render_widget(
+                Paragraph::new(format!(
+                    "{} free  ·  {} / {} used",
+                    bytes(disk.available_bytes),
+                    bytes(disk.used_bytes),
+                    bytes(disk.total_bytes)
+                ))
+                .style(Style::default().fg(FG)),
+                disk_rows[1],
+            );
+        } else {
+            frame.render_widget(Paragraph::new("Disk metrics unavailable"), disk_inner);
+        }
+
+        let network_block = panel("NETWORK", false);
+        let network_inner = network_block.inner(bottom[1]);
+        frame.render_widget(network_block, bottom[1]);
+        if let Some(network) = self.metrics.network.first() {
+            let network_lines = vec![
+                Line::from(Span::styled(
+                    network.name.clone(),
+                    Style::default().fg(ACCENT).bold(),
+                )),
+                Line::from(format!(
+                    "↓ {} /s    ↑ {} /s",
+                    network
+                        .rx_bytes_per_sec
+                        .map(bytes)
+                        .unwrap_or_else(|| "—".into()),
+                    network
+                        .tx_bytes_per_sec
+                        .map(bytes)
+                        .unwrap_or_else(|| "—".into())
+                )),
+                Line::from(format!(
+                    "Total ↓ {}    ↑ {}",
+                    bytes(network.rx_bytes),
+                    bytes(network.tx_bytes)
+                )),
+            ];
+            frame.render_widget(Paragraph::new(network_lines), network_inner);
+        } else {
+            frame.render_widget(Paragraph::new("Network metrics unavailable"), network_inner);
+        }
+
+        let process_block = panel("TOP PROCESSES · CPU", false);
+        let process_inner = process_block.inner(rows[2]);
+        frame.render_widget(process_block, rows[2]);
+        let header = Row::new(["PID", "USER", "PROCESS", "MEM", "CPU"])
+            .style(Style::default().fg(ACCENT).bold());
+        let process_rows = self
+            .metrics
+            .processes
+            .iter()
+            .take(process_inner.height.saturating_sub(1) as usize)
+            .map(|process| {
+                Row::new([
+                    process.pid.to_string(),
+                    process.user.clone(),
+                    process.name.clone(),
+                    format!("{:.1}%", process.memory_percent),
+                    format!("{:.1}%", process.cpu_percent),
+                ])
+                .style(Style::default().fg(FG))
+            });
+        let table = Table::new(
+            process_rows,
+            [
+                Constraint::Length(8),
+                Constraint::Length(9),
+                Constraint::Min(10),
+                Constraint::Length(7),
+                Constraint::Length(7),
+            ],
+        )
+        .header(header)
+        .column_spacing(1);
+        frame.render_widget(table, process_inner);
+    }
+
+    fn draw_footer(&self, frame: &mut Frame, area: Rect) {
+        let lines = if area.width >= 90 {
+            vec![Line::from(vec![hint(
+                "Tab/h/l panel   1–6 jump   click select   j/k rows   PgUp/Dn page   g/G ends   r refresh   q quit",
+            )])]
+        } else if area.height > 1 {
+            vec![
+                Line::from(hint("Tab/h/l panel   1–6 jump   click select")),
+                Line::from(hint(
+                    "j/k rows   PgUp/Dn page   g/G ends   r refresh   q quit",
+                )),
+            ]
+        } else {
+            vec![Line::from(hint("1-6 panel  j/k rows  r refresh  q quit"))]
+        };
+        frame.render_widget(Paragraph::new(lines).style(Style::default().fg(FG)), area);
     }
 
     fn draw_tabs(&self, frame: &mut Frame, area: Rect) {
-        let names = ["CPU", "Memory", "Disks", "Network", "Processes"];
+        let names = ["Overview", "CPU", "Memory", "Disks", "Network", "Processes"];
         let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -261,11 +642,15 @@ impl App {
     }
 
     fn select_tab_at(&mut self, x: u16, y: u16) {
-        let mut start = 1u16;
-        let names = ["CPU", "Memory", "Disks", "Network", "Processes"];
+        let compact_tabs = y == 1;
+        if !compact_tabs && y != 2 {
+            return;
+        }
+        let mut start = if compact_tabs { 0u16 } else { 1u16 };
+        let names = ["Overview", "CPU", "Memory", "Disks", "Network", "Processes"];
         for (index, name) in names.iter().enumerate() {
-            let width = name.len() as u16 + 6; // brackets, digit, and surrounding spaces
-            if y == 2 && x >= start && x < start + width {
+            let width = name.len() as u16 + if compact_tabs { 4 } else { 6 };
+            if x >= start && x < start + width {
                 self.selected_panel = index;
                 return;
             }
@@ -274,6 +659,49 @@ impl App {
     }
 
     fn draw_cpu(&self, frame: &mut Frame, area: Rect) {
+        if area.width < 80 {
+            let mut lines = vec![Line::from(vec![
+                Span::styled("CPU ", Style::default().fg(ACCENT).bold()),
+                Span::styled(
+                    self.metrics
+                        .cpu_percent
+                        .map(|value| format!("{value:.0}% overall"))
+                        .unwrap_or_else(|| "N/A overall".into()),
+                    Style::default().fg(FG).bold(),
+                ),
+            ])];
+            lines.extend(self.metrics.cores.iter().map(|(name, usage)| {
+                Line::from(format!(
+                    "{name:<6} {}",
+                    usage
+                        .map(|value| format!("{value:.0}%"))
+                        .unwrap_or_else(|| "N/A".into())
+                ))
+            }));
+            if self.metrics.gpus.is_empty() {
+                lines.push(Line::from("GPU metrics unavailable"));
+            } else {
+                lines.extend(self.metrics.gpus.iter().map(|gpu| {
+                    Line::from(format!(
+                        "GPU {}  {}",
+                        gpu.utilization_percent
+                            .map(|value| format!("{value}%"))
+                            .unwrap_or_else(|| "N/A".into()),
+                        gpu.temperature_celsius
+                            .map(|value| format!("{value:.0}°C"))
+                            .unwrap_or_else(|| "N/A".into())
+                    ))
+                }));
+            }
+            frame.render_widget(
+                Paragraph::new(lines)
+                    .block(panel("CPU / HARDWARE", self.selected_panel == 1))
+                    .wrap(Wrap { trim: true }),
+                area,
+            );
+            return;
+        }
+
         let split = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(66), Constraint::Percentage(34)])
@@ -379,7 +807,7 @@ impl App {
                 .max(100),
             right_layout[1],
         );
-        frame.render_widget(panel("CPU / HARDWARE", self.selected_panel == 0), area);
+        frame.render_widget(panel("CPU / HARDWARE", self.selected_panel == 1), area);
     }
 
     fn draw_memory(&self, frame: &mut Frame, area: Rect) {
@@ -410,7 +838,7 @@ impl App {
         }
         frame.render_widget(
             Paragraph::new(lines)
-                .block(panel("MEMORY", self.selected_panel == 1))
+                .block(panel("MEMORY", self.selected_panel == 2))
                 .wrap(Wrap { trim: true }),
             area,
         );
@@ -453,7 +881,7 @@ impl App {
         }
         frame.render_widget(
             Paragraph::new(lines)
-                .block(panel("DISKS", self.selected_panel == 2))
+                .block(panel("DISKS", self.selected_panel == 3))
                 .wrap(Wrap { trim: true }),
             area,
         );
@@ -486,7 +914,7 @@ impl App {
         }
         frame.render_widget(
             Paragraph::new(lines)
-                .block(panel("NETWORK", self.selected_panel == 3))
+                .block(panel("NETWORK", self.selected_panel == 4))
                 .wrap(Wrap { trim: true }),
             area,
         );
@@ -537,14 +965,18 @@ impl App {
             ],
         )
         .header(header)
-        .block(panel("PROCESSES · CPU SORT", self.selected_panel == 4))
+        .block(panel("PROCESSES · CPU SORT", self.selected_panel == 5))
         .column_spacing(1);
         frame.render_widget(table, area);
     }
 }
 
-fn is_too_small(area: Rect) -> bool {
-    area.width < 80 || area.height < 24
+fn is_unusable(area: Rect) -> bool {
+    area.width < 40 || area.height < 12
+}
+
+fn is_compact(area: Rect) -> bool {
+    area.width < 100 || area.height < 30
 }
 
 fn max_process_offset(process_count: usize, visible_rows: usize) -> usize {
@@ -563,7 +995,7 @@ fn scroll_process_offset(
 
 #[cfg(test)]
 mod tests {
-    use super::{App, is_too_small, max_process_offset, scroll_process_offset};
+    use super::{App, is_compact, is_unusable, max_process_offset, scroll_process_offset};
     use ratatui::layout::Rect;
     use ratatui::{Terminal, backend::TestBackend};
 
@@ -584,15 +1016,17 @@ mod tests {
     }
 
     #[test]
-    fn minimum_terminal_size_is_checked_at_boundary() {
-        assert!(is_too_small(Rect::new(0, 0, 79, 24)));
-        assert!(is_too_small(Rect::new(0, 0, 80, 23)));
-        assert!(!is_too_small(Rect::new(0, 0, 80, 24)));
+    fn compact_and_minimum_terminal_sizes_are_checked_at_boundaries() {
+        assert!(is_unusable(Rect::new(0, 0, 39, 24)));
+        assert!(is_unusable(Rect::new(0, 0, 80, 11)));
+        assert!(!is_unusable(Rect::new(0, 0, 40, 12)));
+        assert!(is_compact(Rect::new(0, 0, 99, 30)));
+        assert!(!is_compact(Rect::new(0, 0, 100, 30)));
     }
 
     #[test]
     fn small_terminal_render_explains_how_to_recover() {
-        let backend = TestBackend::new(79, 24);
+        let backend = TestBackend::new(39, 12);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut app = App::new();
         terminal.draw(|frame| app.draw(frame)).unwrap();
@@ -605,7 +1039,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(screen.contains("Terminal is too small"));
-        assert!(screen.contains("80 columns by 24 rows"));
+        assert!(screen.contains("40 columns by 12 rows"));
         assert!(screen.contains("Press q or Escape to quit"));
     }
 }
@@ -618,12 +1052,6 @@ fn panel(title: &'static str, selected: bool) -> Block<'static> {
         ))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(if selected { ACCENT } else { MUTED }))
-}
-fn key(text: &'static str) -> Span<'static> {
-    Span::styled(
-        format!(" {text} "),
-        Style::default().fg(BG).bg(ACCENT).bold(),
-    )
 }
 fn hint(text: &'static str) -> Span<'static> {
     Span::styled(text, Style::default().fg(FG))
