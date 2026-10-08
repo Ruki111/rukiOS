@@ -80,10 +80,8 @@ impl Sampler {
             .into_iter()
             .map(|mut item| {
                 if let Some((rx, tx)) = self.previous_network.get(&item.name) {
-                    item.rx_bytes_per_sec =
-                        Some((item.rx_bytes.saturating_sub(*rx) as f64 / elapsed) as u64);
-                    item.tx_bytes_per_sec =
-                        Some((item.tx_bytes.saturating_sub(*tx) as f64 / elapsed) as u64);
+                    item.rx_bytes_per_sec = bytes_per_second(item.rx_bytes, *rx, elapsed);
+                    item.tx_bytes_per_sec = bytes_per_second(item.tx_bytes, *tx, elapsed);
                 }
                 item
             })
@@ -102,14 +100,14 @@ impl Sampler {
                     .get(name)
                     .map(|(prev_read, prev_written)| {
                         (
-                            (read.saturating_sub(*prev_read) as f64 / elapsed) as u64,
-                            (written.saturating_sub(*prev_written) as f64 / elapsed) as u64,
+                            bytes_per_second(*read, *prev_read, elapsed),
+                            bytes_per_second(*written, *prev_written, elapsed),
                         )
                     });
                 disk::DiskIo {
                     name: name.clone(),
-                    read_bytes_per_sec: rates.map(|rate| rate.0),
-                    write_bytes_per_sec: rates.map(|rate| rate.1),
+                    read_bytes_per_sec: rates.and_then(|rate| rate.0),
+                    write_bytes_per_sec: rates.and_then(|rate| rate.1),
                 }
             })
             .collect();
@@ -131,6 +129,34 @@ impl Sampler {
                 .unwrap_or_else(|| "unavailable".into()),
             uptime: uptime(),
         }
+    }
+}
+
+fn bytes_per_second(current: u64, previous: u64, elapsed_seconds: f64) -> Option<u64> {
+    if !elapsed_seconds.is_finite() || elapsed_seconds <= 0.0 {
+        return None;
+    }
+    let delta = current.checked_sub(previous)?;
+    Some((delta as f64 / elapsed_seconds).round() as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bytes_per_second;
+
+    #[test]
+    fn calculates_byte_rates_from_counter_deltas() {
+        assert_eq!(bytes_per_second(4096, 1024, 2.0), Some(1536));
+        assert_eq!(bytes_per_second(5, 5, 1.0), Some(0));
+        assert_eq!(bytes_per_second(3, 0, 2.0), Some(2));
+    }
+
+    #[test]
+    fn counter_resets_and_invalid_elapsed_time_are_unavailable() {
+        assert_eq!(bytes_per_second(10, 11, 1.0), None);
+        assert_eq!(bytes_per_second(10, 1, 0.0), None);
+        assert_eq!(bytes_per_second(10, 1, -1.0), None);
+        assert_eq!(bytes_per_second(10, 1, f64::NAN), None);
     }
 }
 

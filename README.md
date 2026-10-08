@@ -56,6 +56,8 @@ The repository workspace and planned package boundaries are described in [docs/a
 
 Commands for packages, files, and natural-language requests are planned for later.
 
+See [COMMANDS.md](COMMANDS.md) for the complete command reference and keyboard shortcuts for both TUIs.
+
 Natural-language requests are a longer-term goal, for example:
 
 ```text
