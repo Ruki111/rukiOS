@@ -6,7 +6,7 @@ rukiOS reuses the Linux kernel, Arch's package ecosystem, and mature tools such 
 
 ## Project status
 
-rukiOS is at the early planning and development stage. The first milestone is a Rust-based `ruki` CLI that works on an existing Arch Linux installation. Building a custom ISO comes later.
+rukiOS is in early development. Its first milestone is a Rust-based `ruki` CLI that runs on an existing Linux installation. Building a custom ISO comes later.
 
 ## Vision
 
@@ -17,22 +17,30 @@ rukiOS is at the early planning and development stage. The first milestone is a 
 - Keep the system minimal, keyboard-driven, and comfortable for developers.
 - Support graphical applications and, optionally, a replaceable Wayland compositor such as Sway or Hyprland.
 
-## Planned CLI
+## CLI
 
-The initial CLI milestone focuses on:
-
-```bash
-ruki system
-ruki services
-```
-
-The broader interface may grow to include commands such as:
+The current CLI provides these system information commands:
 
 ```bash
-ruki network
-ruki packages
-ruki files
+cargo run -- system
+cargo run -- disk
+cargo run -- memory
+cargo run -- network
+cargo run -- processes       # show the top 10 by CPU use
+cargo run -- processes 20    # choose how many processes to show
+cargo run -- services       # list active systemd services
+cargo run -- health
+cargo run -- health --json
+cargo run -- help
 ```
+
+Run these commands from the project directory. Once installed, use `ruki` in place of `cargo run --`.
+
+`health` summarizes memory, root disk usage, and active network interfaces. It reports `WARN` when disk use reaches 85% or memory use reaches 90%, and `UNKNOWN` when a reading is unavailable. The JSON form provides the same checks in a machine-readable format.
+
+The CLI currently relies on standard Linux utilities: `df`, `ip`, `ps`, `systemctl`, and `uname`. Some commands require the corresponding utility or systemd to be available.
+
+Commands for packages, files, and natural-language requests are planned for later.
 
 Natural-language requests are a longer-term goal, for example:
 
