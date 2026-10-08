@@ -29,7 +29,7 @@ cargo run --bin ruki
 cargo run --bin ruki-monitor
 ```
 
-The monitor dashboard shows CPU load and per-core usage, recent CPU history, available GPU and temperature readings, memory and swap, root disk capacity and disk I/O, network throughput, and processes sorted by CPU. Hardware sensor support depends on what Linux exposes on the machine; unavailable values are shown as unavailable. The System Console sections cover overview, system information, disk, memory, network, processes, services, health, and recent logs. The command-line commands are still available for scripts and quick checks:
+The monitor dashboard shows CPU load and per-core usage, recent CPU history, available GPU and temperature readings, memory and swap, root disk capacity and disk I/O, network throughput, and processes sorted by CPU. Hardware sensor support depends on what Linux exposes on the machine; unavailable values are shown as unavailable. The System Console sections cover overview, system information, disk, memory, network, processes, services, health, and recent logs. Its Services section can search and inspect systemd units and request start, stop, or restart after an in-app confirmation; systemd permissions still apply. The command-line commands are still available for scripts and quick checks:
 
 ```bash
 cargo run -- system
@@ -47,6 +47,8 @@ cargo run -- help
 ```
 
 Run these commands from the project directory. Once installed, use `ruki` in place of `cargo run --`.
+
+An Arch package recipe is available at [packaging/arch/PKGBUILD](packaging/arch/PKGBUILD). After these changes are published, build and install it from the repository with `cd packaging/arch && makepkg -si`. This installs both `ruki` and `ruki-monitor`; it packages the applications, not a complete rukiOS distribution.
 
 `health` summarizes memory, root disk usage, and active network interfaces. It reports `WARN` when disk use reaches 85% or memory use reaches 90%, and `UNKNOWN` when a reading is unavailable. The JSON form provides the same checks in a machine-readable format.
 
