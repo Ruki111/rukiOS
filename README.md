@@ -19,7 +19,7 @@ rukiOS is in early development. The Rust-based `ruki` program runs on an existin
 
 ## Interface
 
-Running the program without a command opens the interactive full-screen TUI. It keeps a consistent system snapshot while you navigate; press `r` to refresh it. Use `j`/`k` or `h`/`l` to move between sections, `1`–`9` to jump to a section, `g`/`G` for the first/last section, `Ctrl-u`/`Ctrl-d` to scroll, and `q` or Escape to quit. Arrow keys and Page Up/Page Down also work.
+Running the program without a command opens the interactive full-screen TUI. It keeps a consistent system snapshot while you navigate; press `r` to refresh it. Use `j`/`k` or `h`/`l` to move between sections, `1`–`9` or `0` to jump to a section, `g`/`G` for the first/last section, `Ctrl-u`/`Ctrl-d` to scroll, and `q` or Escape to quit. Arrow keys and Page Up/Page Down also work.
 
 Start it from the project directory with:
 
@@ -27,7 +27,7 @@ Start it from the project directory with:
 cargo run
 ```
 
-The TUI has an overview and sections for system information, disk, memory, network, processes, services, health, and recent logs. The command-line commands are still available for scripts and quick checks:
+The TUI has an overview and sections for monitoring, system information, disk, memory, network, processes, services, health, and recent logs. The command-line commands are still available for scripts and quick checks:
 
 ```bash
 cargo run -- system
@@ -49,6 +49,8 @@ Run these commands from the project directory. Once installed, use `ruki` in pla
 `health` summarizes memory, root disk usage, and active network interfaces. It reports `WARN` when disk use reaches 85% or memory use reaches 90%, and `UNKNOWN` when a reading is unavailable. The JSON form provides the same checks in a machine-readable format.
 
 The interface uses Ratatui and Crossterm. System details rely on standard Linux utilities: `df`, `ip`, `ps`, `systemctl`, `journalctl`, and `uname`. Some sections require the corresponding utility or systemd to be available. Access to system logs depends on the journal permissions of the current user.
+
+The repository workspace and planned package boundaries are described in [docs/architecture/PROJECT_STRUCTURE.md](docs/architecture/PROJECT_STRUCTURE.md).
 
 Commands for packages, files, and natural-language requests are planned for later.
 
