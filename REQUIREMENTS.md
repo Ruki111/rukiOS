@@ -8,13 +8,14 @@ We are not building a new Linux kernel or replacing existing applications. We ar
 
 ## Core Philosophy
 
-- **Keyboard First:** Every system-management workflow must be usable from the keyboard. Keyboard navigation is the default and must not be a second-class alternative to mouse use.
-- **Mouse Optional:** Mouse input may make pointer-oriented tasks more convenient, but no essential action may require a mouse. Use it where it adds value, such as selecting charts, resizable panels, or graphical applications.
-- **Terminal First:** System management should primarily happen through the terminal, with polished TUIs for interactive and information-dense tasks.
-- **Use GUIs Where They Fit:** Graphical applications such as browsers, editors, and creative tools remain welcome. The system should not force a terminal workflow where a GUI is a better fit.
-- **Use Existing Linux Software:** Reuse mature Linux tools instead of reinventing them.
-- **AI Integrated:** AI should be deeply integrated into system management and automation.
-- **Simple and Developer Friendly:** The system should be fast, minimal, keyboard-driven, and comfortable for developers.
+- **Keyboard First:** The keyboard is the primary control method throughout the distribution. Essential workflows must be complete without a mouse.
+- **Vim-Inspired Navigation:** Use consistent Vim-style movement and command patterns, alongside familiar arrow, page, and conventional shortcuts. Show shortcuts and make them discoverable.
+- **TUI and CLI First:** System setup, management, and daily system workflows are provided through a polished TUI or scriptable CLI. A graphical settings layer is outside the core product direction.
+- **Filesystem-Accessible:** System state and configuration should be available through clear, documented filesystem paths and formats where practical. Users and agents should be able to inspect changes and understand where system data lives; filesystem access complements the CLI/TUI rather than hiding behavior.
+- **Arch Linux Base:** Build on Arch Linux and its package ecosystem, reusing the kernel and mature system components instead of replacing them without a clear need.
+- **Agents Are First-Class:** Integrated AI agents use documented ruki interfaces and bounded system tools. They should understand the distribution's operations and state, propose changes clearly, and request approval for consequential actions.
+- **Simple and Developer Friendly:** Keep the system fast, understandable, maintainable, and comfortable for developers.
+- **Graphical Applications Are Out of Scope for the Core Experience:** Do not make GUI applications, mouse-oriented workflows, or a desktop environment a product requirement. Any later optional graphical support must not displace the keyboard/TUI/CLI experience.
 
 ## ruki System Monitor
 
@@ -36,7 +37,7 @@ The first substantial ruki application is a system monitor and task manager for 
 - Provide keyboard access to every panel, selection, sort, filter, and available action.
 - Show discoverable shortcut hints in the interface and provide a help view.
 - Support Vim-style movement and standard arrow/page keys, with consistent behavior across screens.
-- Support mouse input as an optional convenience where it improves interaction; keyboard users must be able to complete the same workflows.
+- Make keyboard operation the complete, primary interaction model; mouse support is not a requirement for the core TUI.
 - Adapt layouts to terminal size, preserve readable labels, and bound scrolling to available content.
 - Use clear status colors and text labels so meaning is not communicated by color alone.
 
@@ -54,7 +55,7 @@ The first substantial ruki application is a system monitor and task manager for 
 
 The `ruki` executable is the main user-facing system-management application. Running `ruki` without a subcommand opens the keyboard-first system-monitor TUI; CLI subcommands remain available for quick checks and automation.
 
-`ruki` should provide a consistent interface for managing the system.
+`ruki` should provide a consistent interface for managing the system through CLI commands, its keyboard-first TUI, and documented filesystem interfaces where appropriate.
 
 Examples:
 
@@ -73,6 +74,8 @@ ruki "connect me to my home Wi-Fi"
 ruki "install Docker and start it automatically"
 ruki "show me what is using my RAM"
 ```
+
+The natural-language interface is backed by integrated agents that call documented ruki/system operations. It must not depend on an unrestricted, opaque shell session as its system integration contract.
 
 ### 2. TUI-Based System Management
 
@@ -136,23 +139,17 @@ We will reuse:
 - `systemd`
 - NetworkManager
 - Existing Linux utilities
-- Existing GUI applications
 
 ## Graphical Environment
 
-A Wayland compositor such as **Sway or Hyprland** may be included to support graphical applications and modern desktop workflows.
-
-It is **not the core of rukiOS**.
-
-The terminal and ruki tooling remain the primary interface.
+A graphical desktop or compositor is not part of the required core experience or initial product scope. The distribution is designed to be usable through terminal, TUI, CLI, and documented filesystem interfaces. Optional graphical application support can be considered later only if it preserves this direction and does not introduce GUI-only system workflows.
 
 ## Technology Direction
 
 - **Rust:** ruki CLI/TUI and system-level tooling.
 - **Bash:** Installation and small system scripts where appropriate.
 - **Arch Linux:** Base distribution.
-- **Wayland:** Graphical protocol when graphical support is required.
-- **Sway/Hyprland:** Optional/replaceable compositor layer.
+- **Wayland/Sway/Hyprland:** Not required for the core product; reconsider only for explicitly optional graphical support.
 - **Existing Linux tools:** Reuse wherever possible.
 
 ## Development Strategy
@@ -179,6 +176,17 @@ rukiOS packaging
 Custom ISO
 ```
 
+## First-Release User Outcomes
+
+The first useful rukiOS release should let a person complete these four jobs from a keyboard, using the CLI/TUI and inspectable system data:
+
+1. **Check system health:** Open a live overview of CPU, memory, storage, network, and health warnings, with unavailable readings clearly identified.
+2. **Find and inspect a process:** Search or sort running processes, understand their resource use, and explicitly confirm before requesting a process stop.
+3. **Manage a system service:** Find a service, inspect its state, and start, stop, or restart it with a clear confirmation before a state-changing action.
+4. **Ask an integrated agent about system state:** Ask a plain-language question such as “What is using my memory?” and get an answer grounded in data returned by documented ruki tools. This first agent workflow is read-only.
+
+These are the first-release outcomes, not a promise that every surrounding subsystem is already implemented. Defer an ISO/installer, GUI control panels, broad package/network configuration, multi-distro support, and agent-initiated system changes until these four workflows work end-to-end. Existing CLI, TUI, and filesystem interfaces should expose the same underlying system state where appropriate.
+
 ## Initial implementation milestone
 
 The first milestone is a useful **ruki system monitor and management TUI** that runs on an existing Arch installation. It should establish the interaction, metric collection, and code-organization foundations before broader system-management and distribution work.
@@ -200,7 +208,8 @@ The monitor roadmap includes live CPU/GPU, memory, storage, processes, and netwo
 - Not a collection of unnecessary replacement applications.
 - Not just an Arch theme.
 - Not just Hyprland with dotfiles.
-- Not a GUI-free requirement for every application.
+- Not a mouse-first or GUI-centered desktop distribution.
+- Not an agent that operates outside documented, bounded system interfaces.
 
 ## Long-Term Goal
 
