@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101310">
+  <title>rukiOS — Requirements plan</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101310;--panel:#181d18;--panel2:#202720;--line:#303a30;--text:#eef2e9;--muted:#a2ada0;--green:#b8f36a;--amber:#f4c879;--red:#f18a7b;--blue:#8dc8e7;--mono:ui-monospace,SFMono-Regular,Consolas,monospace;--sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 var(--sans)}main{width:min(1050px,calc(100% - 40px));margin:0 auto;padding:34px 0 60px}.top{display:flex;justify-content:space-between;align-items:center;padding-bottom:20px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:11px}.mark{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--green);color:#16200f;font:900 20px var(--mono)}.name{font-weight:750;letter-spacing:-.04em}.tag{color:var(--muted);font-size:11px}.status{border:1px solid #55472d;border-radius:99px;padding:5px 10px;color:var(--amber);background:#211e16;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+    .hero{padding:56px 0 37px}.eyebrow{color:var(--green);font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase}.eyebrow:before{content:"";display:inline-block;width:19px;height:1px;margin:0 8px 4px 0;background:var(--green)}h1{max-width:780px;margin:14px 0;font-size:clamp(36px,7vw,66px);line-height:1;letter-spacing:-.065em;font-weight:680}h1 span{color:var(--green)}.lead{max-width:760px;color:#b6c0b4;font-size:16px;line-height:1.7}.source{display:inline-flex;gap:8px;align-items:center;margin-top:12px;color:#899488;font-size:11px}.source b{color:var(--blue);font-weight:550}
+    h2{margin:0;font-size:20px;letter-spacing:-.035em}.section{margin-top:32px}.section-head{display:flex;align-items:end;justify-content:space-between;gap:15px;margin-bottom:13px}.hint{color:#899488;font-size:11px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.card{padding:19px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#1a201a,#151915)}.card h3{display:flex;align-items:center;gap:9px;margin:0 0 12px;font-size:14px}.icon{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;color:var(--green);background:#283322;font:12px var(--mono)}.items{display:grid;gap:10px;margin:0;padding:0;list-style:none}.items li{position:relative;padding-left:18px;color:#c7d0c5;font-size:12px;line-height:1.55}.items li:before{position:absolute;left:0;content:"✓";color:var(--green);font-weight:700}.items small{display:block;margin-top:2px;color:#839082;font-size:10px}.avoid .icon{color:var(--red);background:#332421}.avoid .items li:before{content:"×";color:var(--red)}
+    .monitor{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.mini{padding:15px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.mini b{display:block;margin-bottom:5px;color:var(--green);font:10px var(--mono);letter-spacing:.09em;text-transform:uppercase}.mini span{color:#c6cec3;font-size:11px;line-height:1.5}.sequence{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;counter-reset:stage}.stage{position:relative;min-height:127px;padding:15px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.stage:before{counter-increment:stage;content:"0" counter(stage);display:block;margin-bottom:17px;color:var(--green);font:11px var(--mono)}.stage:not(:last-child):after{content:"→";position:absolute;right:-11px;top:14px;z-index:1;color:#758071}.stage h3{margin:0 0 6px;font-size:12px}.stage p{margin:0;color:var(--muted);font-size:10px;line-height:1.5}.callout{margin-top:12px;padding:14px 16px;border:1px solid #54472d;border-radius:10px;color:#d5c39e;background:#211e16;font-size:12px}.callout b{color:var(--amber)}.bottom{display:flex;justify-content:space-between;gap:15px;margin-top:40px;padding-top:14px;border-top:1px solid var(--line);color:#7d887b;font-size:10px}
+    @media(max-width:700px){main{width:min(100% - 28px,560px);padding-top:18px}.hero{padding:38px 0 22px}.grid{grid-template-columns:1fr}.monitor{grid-template-columns:repeat(2,minmax(0,1fr))}.sequence{grid-template-columns:1fr 1fr}.stage:nth-child(2):after{display:none}.section-head{align-items:start;flex-direction:column}.bottom{flex-direction:column}}@media(max-width:420px){.monitor,.sequence{grid-template-columns:1fr}.stage{min-height:auto}.stage:after{display:none!important}.status{font-size:8px}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="top"><div class="brand"><div class="mark">r</div><div><div class="name">rukiOS</div><div class="tag">Distribution plan · owner direction</div></div></div><div class="status">Planning artifact</div></header>
+  <section class="hero">
+    <div class="eyebrow">What we are building</div>
+    <h1>An Arch-based system.<br><span>Keyboard first. Agent ready.</span></h1>
+    <p class="lead">rukiOS is a terminal and TUI driven Linux distribution. People and integrated AI agents use the same clear commands, system tools, and inspectable filesystem interfaces to understand and manage the machine.</p>
+    <div class="source"><b>Basis</b><span>Project owner direction, combined with monitor and safety requirements in <code>REQUIREMENTS.md</code>.</span><a href="month-one-plan.html" style="margin-left:12px;color:var(--green)">Open the first-month plan →</a></div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Required in the product</h2><span class="hint">What the requirements call for</span></div>
+    <div class="grid">
+      <article class="card"><h3><span class="icon">OS</span>Distribution foundation</h3><ul class="items"><li>Arch Linux base, Linux kernel, and Arch package ecosystem.<small>Reuse pacman, systemd, NetworkManager, and established Linux tools.</small></li><li>Rust-based ruki CLI and TUI as the system's user-facing control layer.</li><li>Deliver core system settings and workflows in terminal interfaces, not GUI control panels.</li></ul></article>
+      <article class="card"><h3><span class="icon">⌨</span>Keyboard and Vim style</h3><ul class="items"><li>Keyboard is the primary way to navigate and operate; mouse is optional convenience.</li><li>Vim-inspired movement and shortcuts are consistent across system TUIs.</li><li>Help, focus, selection, search, and actions remain discoverable and usable without a mouse.</li></ul></article>
+      <article class="card"><h3><span class="icon">CLI</span>Terminal + filesystem</h3><ul class="items"><li>System capabilities are reachable through commands and TUIs.</li><li>Use inspectable text configuration and filesystem interfaces where appropriate, so users and tools can understand how the system is set up.</li><li>Keep interface behavior accessible to scripts and automation instead of hiding controls in a graphical app.</li></ul></article>
+      <article class="card"><h3><span class="icon">MON</span>System monitor</h3><ul class="items"><li>CPU totals/per-core/load/temperature; GPU identity, use, and temperature when available.</li><li>Memory and swap; filesystem capacity and disk activity; network rates and totals.</li><li>Process search, sorting, useful columns, and process tree; confirm any process-changing action.</li><li>Predictable live sampling; unavailable readings shown as unavailable, never fabricated as zero.</li></ul></article>
+      <article class="card"><h3><span class="icon">SYS</span>System management</h3><ul class="items"><li>Consistent ruki commands and TUIs for system areas such as network, packages, services, processes, users, storage, information, logs, and configuration.</li><li>Keyboard-driven workflows expose status, actions, and results consistently.</li><li>System tools are designed as usable interfaces for both people and authorized automation.</li></ul></article>
+      <article class="card"><h3><span class="icon">AI</span>Integrated AI agents</h3><ul class="items"><li>AI agents are a built-in part of the distribution's system-management experience, not a detached chatbot issuing random shell commands.</li><li>Agents use documented ruki commands or explicit system tools and filesystem interfaces, with clear capabilities and permission boundaries.</li><li>Show planned actions, require approval for risky changes, record outcomes, detect dangerous operations, and support rollback where practical.</li></ul></article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>What to avoid</h2><span class="hint">Explicit boundaries in the requirements</span></div>
+    <div class="grid">
+      <article class="card avoid"><h3><span class="icon">×</span>Do not turn it into</h3><ul class="items"><li>A new kernel or operating system written from scratch.</li><li>A collection of unnecessary replacements for established Linux tools.</li><li>Just an Arch theme or just a window-manager configuration.</li><li>A GUI-led desktop where essential system management requires pointing and clicking.</li></ul></article>
+      <article class="card avoid"><h3><span class="icon">!</span>Do not do this while building</h3><ul class="items"><li>Start with a custom ISO; first prove the useful ruki workflows on existing Arch.</li><li>Give an agent unrestricted shell access or let it execute arbitrary generated commands.</li><li>Hide system configuration and actions behind interfaces unavailable to terminal users or agents.</li><li>Fake missing hardware or permission-limited metrics as zero values.</li></ul></article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Build in this order</h2><span class="hint">Sequence from the requirements</span></div>
+    <div class="sequence">
+      <article class="stage"><h3>Keyboard-first ruki</h3><p>Prove the TUI monitor and CLI on existing Arch, with Vim-style controls and reliable system readings.</p></article>
+      <article class="stage"><h3>System tools + files</h3><p>Build consistent TUI/CLI workflows and inspectable filesystem interfaces for system setup and management.</p></article>
+      <article class="stage"><h3>Integrated agents</h3><p>Give agents documented tools to inspect and manage rukiOS. Bound permissions, review risky plans, and record outcomes.</p></article>
+      <article class="stage"><h3>Distribution / ISO</h3><p>Package the working environment and agent interfaces into a reproducible rukiOS install.</p></article>
+    </div>
+    <div class="callout"><b>First milestone:</b> prove the keyboard-first TUI and CLI on existing Arch. Design system interfaces so a built-in agent can use them later. Build the custom distribution image after those interfaces work.</div>
+  </section>
+  <footer class="bottom"><span>rukiOS · Distribution plan</span><span>Draft from project owner direction · review and revise together</span></footer>
+</main>
+</body>
+</html>
